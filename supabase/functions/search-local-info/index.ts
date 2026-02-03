@@ -5,9 +5,10 @@ const corsHeaders = {
 
 interface SearchRequest {
   query: string;
-  type: 'events' | 'accommodations' | 'attractions' | 'traffic' | 'all';
+  type: 'events' | 'accommodations' | 'attractions' | 'traffic' | 'event-detail' | 'accommodation-detail' | 'all';
   location: string;
   county?: string;
+  slug?: string;
 }
 
 Deno.serve(async (req) => {
@@ -16,7 +17,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { query, type, location, county } = await req.json() as SearchRequest;
+    const { query, type, location, county, slug } = await req.json() as SearchRequest;
     
     const apiKey = Deno.env.get('LOVABLE_API_KEY');
     if (!apiKey) {
@@ -36,15 +37,72 @@ Returnează răspunsul STRICT în format JSON astfel:
   "events": [
     {
       "title": "Numele evenimentului",
-      "date": "Data (ex: 15 Februarie 2025 sau Permanent)",
-      "location": "Locația exactă",
-      "description": "Descriere scurtă în română",
-      "category": "Festival/Concert/Târg/Cultural/Sport/Comunitar"
+      "slug": "nume-eveniment-unic",
+      "date": "15 Februarie 2025",
+      "endDate": "17 Februarie 2025 (sau null dacă e o singură zi)",
+      "time": "10:00 - 22:00",
+      "location": "Locația exactă, adresa",
+      "city": "${location}",
+      "description": "Descriere detaliată în română (3-4 propoziții)",
+      "category": "Festival/Concert/Târg/Cultural/Sport/Comunitar/Expoziție/Gastro",
+      "isPaid": true/false,
+      "ticketPrice": "50 RON" sau "Gratuit",
+      "ticketUrl": "https://bilete.ro/exemplu sau null",
+      "organizer": "Numele organizatorului",
+      "imageKeywords": "cuvinte cheie pentru imagine, ex: festival muzica romania",
+      "highlights": ["Atracție 1", "Atracție 2", "Atracție 3"]
     }
   ]
 }
 
-Dacă nu găsești evenimente specifice, include evenimente tradiționale/anuale ale zonei. Returnează maxim 10 evenimente.`;
+Dacă nu găsești evenimente specifice, include evenimente tradiționale/anuale ale zonei. Returnează maxim 12 evenimente. ASIGURĂ-TE că fiecare eveniment are un slug unic și dată validă.`;
+        break;
+
+      case 'event-detail':
+        prompt = `Ești un expert în evenimente din România. Generează informații detaliate pentru un eveniment cu identificatorul "${slug}" din ${locationContext}.
+
+Returnează răspunsul STRICT în format JSON astfel:
+{
+  "event": {
+    "title": "Numele complet al evenimentului",
+    "slug": "${slug}",
+    "date": "15 Februarie 2025",
+    "endDate": "17 Februarie 2025 sau null",
+    "time": "10:00 - 22:00",
+    "location": "Adresa completă a locației",
+    "city": "${location}",
+    "venue": "Numele locației/sălii",
+    "description": "Descriere foarte detaliată în română (5-6 propoziții)",
+    "longDescription": "Descriere extinsă cu istoria evenimentului, ce include, de ce merită vizitat (2-3 paragrafe)",
+    "category": "Festival/Concert/Târg/Cultural/Sport/Comunitar",
+    "isPaid": true/false,
+    "ticketPrice": "50 RON" sau "Gratuit",
+    "ticketPriceRange": {"min": 30, "max": 150, "currency": "RON"},
+    "ticketUrl": "https://bilete.ro/exemplu sau null",
+    "organizer": "Numele organizatorului",
+    "organizerContact": "contact@organizer.ro",
+    "images": [
+      {"url": "festival outdoor crowd summer", "alt": "Descriere imagine 1", "type": "main"},
+      {"url": "concert stage lights romania", "alt": "Descriere imagine 2", "type": "gallery"},
+      {"url": "food festival traditional romanian", "alt": "Descriere imagine 3", "type": "gallery"},
+      {"url": "people dancing celebration event", "alt": "Descriere imagine 4", "type": "gallery"},
+      {"url": "night festival city lights", "alt": "Descriere imagine 5", "type": "gallery"},
+      {"url": "traditional romanian culture event", "alt": "Descriere imagine 6", "type": "gallery"}
+    ],
+    "highlights": ["Atracție principală 1", "Atracție 2", "Atracție 3", "Atracție 4"],
+    "schedule": [
+      {"day": "Vineri, 15 Feb", "activities": ["10:00 - Deschidere oficială", "14:00 - Concert X", "20:00 - Show principal"]},
+      {"day": "Sâmbătă, 16 Feb", "activities": ["11:00 - Workshop", "16:00 - Competiție", "21:00 - Petrecere"]}
+    ],
+    "facilities": ["Parcare", "Toalete", "Food court", "Zonă copii"],
+    "accessibility": "Accesibil pentru persoane cu dizabilități",
+    "tips": ["Vino devreme pentru locuri bune", "Ia numerar pentru standuri", "Verifică prognoza meteo"],
+    "nearbyAttractions": ["Atracție 1 din zonă", "Atracție 2 din zonă"],
+    "coordinates": {"lat": 44.4268, "lng": 26.1025}
+  }
+}
+
+Generează informații realiste și utile pentru vizitatori. Imaginile sunt keywords pentru Unsplash.`;
         break;
         
       case 'accommodations':
@@ -55,15 +113,85 @@ Returnează răspunsul STRICT în format JSON astfel:
   "accommodations": [
     {
       "name": "Numele unității de cazare",
-      "type": "Hotel/Pensiune/Cabană/Apartament/Camping",
-      "description": "Descriere scurtă în română",
+      "slug": "nume-cazare-unic",
+      "type": "Hotel/Pensiune/Cabană/Apartament/Camping/Vila/Hostel",
+      "description": "Descriere scurtă în română (2 propoziții)",
       "priceRange": "Buget/Mediu/Premium",
-      "amenities": ["WiFi", "Parcare", "Restaurant", etc]
+      "pricePerNight": {"min": 150, "max": 300, "currency": "RON"},
+      "rating": 4.5,
+      "reviewCount": 120,
+      "amenities": ["WiFi", "Parcare", "Restaurant", "Piscină", "Spa", "AC"],
+      "address": "Strada, Număr, Oraș",
+      "city": "${location}",
+      "imageKeywords": "hotel modern romania mountain view",
+      "highlights": ["Vedere la munte", "Mic dejun inclus", "Check-in 24h"]
     }
   ]
 }
 
-Returnează maxim 10 opțiuni de cazare populare sau recomandate.`;
+Returnează maxim 12 opțiuni de cazare populare sau recomandate. ASIGURĂ-TE că fiecare cazare are un slug unic.`;
+        break;
+
+      case 'accommodation-detail':
+        prompt = `Ești un expert în turism și cazări din România. Generează informații foarte detaliate pentru o cazare cu identificatorul "${slug}" din ${locationContext}.
+
+Returnează răspunsul STRICT în format JSON astfel:
+{
+  "accommodation": {
+    "name": "Numele complet al cazării",
+    "slug": "${slug}",
+    "type": "Hotel/Pensiune/Cabană/Apartament/Vila",
+    "stars": 4,
+    "description": "Descriere detaliată în română (3-4 propoziții)",
+    "longDescription": "Descriere extinsă cu facilități, ambient, de ce e specială această cazare (2-3 paragrafe)",
+    "address": "Strada Exemplu Nr. 10",
+    "city": "${location}",
+    "county": "${county || 'România'}",
+    "pricePerNight": {"min": 150, "max": 350, "currency": "RON"},
+    "rating": 4.5,
+    "reviewCount": 234,
+    "checkIn": "14:00",
+    "checkOut": "11:00",
+    "images": [
+      {"url": "luxury hotel room interior design", "alt": "Camera principală", "type": "main"},
+      {"url": "hotel bathroom modern spa", "alt": "Baie modernă", "type": "gallery"},
+      {"url": "hotel restaurant breakfast buffet", "alt": "Restaurant", "type": "gallery"},
+      {"url": "hotel pool outdoor summer", "alt": "Piscină", "type": "gallery"},
+      {"url": "hotel lobby reception elegant", "alt": "Recepție", "type": "gallery"},
+      {"url": "hotel terrace mountain view romania", "alt": "Vedere exterioară", "type": "gallery"}
+    ],
+    "amenities": ["WiFi gratuit", "Parcare gratuită", "Restaurant", "Room service", "AC", "TV", "Minibar"],
+    "roomTypes": [
+      {"name": "Cameră Standard", "capacity": 2, "price": 150, "features": ["Pat dublu", "Baie privată"]},
+      {"name": "Cameră Deluxe", "capacity": 2, "price": 250, "features": ["Pat king", "Balcon", "Jacuzzi"]},
+      {"name": "Apartament", "capacity": 4, "price": 350, "features": ["2 camere", "Bucătărie", "Living"]}
+    ],
+    "facilities": ["Piscină interioară", "Saună", "Spa", "Sală fitness", "Biciclete gratuite"],
+    "policies": {
+      "cancellation": "Anulare gratuită cu 24h înainte",
+      "children": "Copii bine primiți",
+      "pets": "Animale permise (taxă suplimentară)",
+      "smoking": "Interzis fumatul"
+    },
+    "nearbyAttractions": [
+      {"name": "Atracție turistică apropiată", "distance": "2 km"},
+      {"name": "Centrul orașului", "distance": "500 m"}
+    ],
+    "reviews": [
+      {"author": "Maria P.", "rating": 5, "text": "Locație excelentă, personal amabil!", "date": "Ianuarie 2025"},
+      {"author": "Ion D.", "rating": 4, "text": "Cameră curată, mic dejun bun.", "date": "Decembrie 2024"}
+    ],
+    "contact": {
+      "phone": "+40 XXX XXX XXX",
+      "email": "contact@hotel.ro",
+      "website": "https://hotel-example.ro"
+    },
+    "coordinates": {"lat": 44.4268, "lng": 26.1025},
+    "bookingTips": ["Rezervă din timp în sezon", "Cere cameră cu vedere", "Verifică ofertele speciale"]
+  }
+}
+
+Generează informații realiste și utile. Imaginile sunt keywords pentru căutare imagini.`;
         break;
         
       case 'attractions':
@@ -83,15 +211,22 @@ Returnează răspunsul STRICT în format JSON astfel:
   "attractions": [
     {
       "title": "Numele atracției",
-      "category": "Muzeu/Natură/Istoric/Religios/Recreere/Traseu",
+      "slug": "nume-atractie-unic",
+      "category": "Muzeu/Natură/Istoric/Religios/Recreere/Traseu/Cascadă/Peșteră/Castel/Lac",
       "description": "Descriere detaliată în română (2-3 propoziții)",
       "location": "Adresa sau locația exactă",
-      "tips": "Sfaturi pentru vizitatori (program, taxe, etc)"
+      "city": "${location}",
+      "tips": "Sfaturi pentru vizitatori (program, taxe, etc)",
+      "imageKeywords": "romanian castle medieval architecture",
+      "isPaid": true/false,
+      "entryFee": "20 RON sau Gratuit",
+      "openingHours": "09:00 - 17:00",
+      "duration": "1-2 ore"
     }
   ]
 }
 
-Returnează toate atracțiile pe care le cunoști din zonă (maxim 20).`;
+Returnează toate atracțiile pe care le cunoști din zonă (maxim 20). ASIGURĂ-TE că fiecare atracție are un slug unic.`;
         break;
         
       case 'traffic':
@@ -109,11 +244,13 @@ Returnează răspunsul STRICT în format JSON astfel:
       {
         "road": "DN1/E60/etc",
         "description": "Descrierea restricției",
-        "status": "Închis/Restricționat/Lucrări"
+        "status": "Închis/Restricționat/Lucrări",
+        "icon": "construction/warning/closed"
       }
     ],
     "tips": ["Sfat 1", "Sfat 2"],
-    "tollInfo": "Informații despre taxe dacă există"
+    "tollInfo": "Informații despre taxe dacă există",
+    "alternativeRoutes": ["Rută alternativă 1", "Rută alternativă 2"]
   }
 }`;
         break;
@@ -122,7 +259,7 @@ Returnează răspunsul STRICT în format JSON astfel:
         prompt = `Oferă un rezumat turistic complet pentru ${locationContext}.`;
     }
 
-    console.log(`Searching ${type} for ${location}`);
+    console.log(`Searching ${type} for ${location}${slug ? ` (slug: ${slug})` : ''}`);
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -135,7 +272,7 @@ Returnează răspunsul STRICT în format JSON astfel:
         messages: [
           {
             role: 'system',
-            content: 'Ești un asistent turistic expert pentru România. Răspunzi doar în format JSON valid, fără text adițional. Toate răspunsurile sunt în limba română.'
+            content: 'Ești un asistent turistic expert pentru România. Răspunzi doar în format JSON valid, fără text adițional. Toate răspunsurile sunt în limba română. Generezi date realiste și utile pentru utilizatori.'
           },
           {
             role: 'user',
@@ -147,6 +284,18 @@ Returnează răspunsul STRICT în format JSON astfel:
     });
 
     if (!response.ok) {
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Prea multe cereri. Încearcă din nou în câteva secunde.' }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (response.status === 402) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Credite insuficiente. Contactează administratorul.' }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       const errorText = await response.text();
       console.error('AI Gateway error:', errorText);
       throw new Error(`AI request failed: ${response.status}`);

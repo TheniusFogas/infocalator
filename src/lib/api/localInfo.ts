@@ -2,26 +2,91 @@ import { supabase } from '@/integrations/supabase/client';
 
 export interface Event {
   title: string;
+  slug: string;
   date: string;
+  endDate?: string;
+  time?: string;
   location: string;
+  city: string;
   description: string;
   category: string;
+  isPaid?: boolean;
+  ticketPrice?: string;
+  ticketUrl?: string;
+  organizer?: string;
+  imageKeywords?: string;
+  highlights?: string[];
+}
+
+export interface EventDetail extends Event {
+  venue?: string;
+  longDescription?: string;
+  ticketPriceRange?: { min: number; max: number; currency: string };
+  organizerContact?: string;
+  images?: Array<{ url: string; alt: string; type: string }>;
+  schedule?: Array<{ day: string; activities: string[] }>;
+  facilities?: string[];
+  accessibility?: string;
+  tips?: string[];
+  nearbyAttractions?: string[];
+  coordinates?: { lat: number; lng: number };
 }
 
 export interface Accommodation {
   name: string;
+  slug: string;
   type: string;
   description: string;
   priceRange: string;
+  pricePerNight?: { min: number; max: number; currency: string };
+  rating?: number;
+  reviewCount?: number;
   amenities: string[];
+  address?: string;
+  city?: string;
+  imageKeywords?: string;
+  highlights?: string[];
+}
+
+export interface AccommodationDetail extends Accommodation {
+  stars?: number;
+  longDescription?: string;
+  county?: string;
+  checkIn?: string;
+  checkOut?: string;
+  images?: Array<{ url: string; alt: string; type: string }>;
+  roomTypes?: Array<{ name: string; capacity: number; price: number; features: string[] }>;
+  facilities?: string[];
+  policies?: {
+    cancellation?: string;
+    children?: string;
+    pets?: string;
+    smoking?: string;
+  };
+  nearbyAttractions?: Array<{ name: string; distance: string }>;
+  reviews?: Array<{ author: string; rating: number; text: string; date: string }>;
+  contact?: {
+    phone?: string;
+    email?: string;
+    website?: string;
+  };
+  coordinates?: { lat: number; lng: number };
+  bookingTips?: string[];
 }
 
 export interface AIAttraction {
   title: string;
+  slug?: string;
   category: string;
   description: string;
   location: string;
+  city?: string;
   tips?: string;
+  imageKeywords?: string;
+  isPaid?: boolean;
+  entryFee?: string;
+  openingHours?: string;
+  duration?: string;
 }
 
 export interface TrafficInfo {
@@ -29,9 +94,11 @@ export interface TrafficInfo {
     road: string;
     description: string;
     status: string;
+    icon?: string;
   }>;
   tips: string[];
   tollInfo?: string;
+  alternativeRoutes?: string[];
 }
 
 export interface GeocodeResult {
@@ -43,7 +110,7 @@ export interface GeocodeResult {
   county?: string;
 }
 
-type SearchType = 'events' | 'accommodations' | 'attractions' | 'traffic';
+type SearchType = 'events' | 'accommodations' | 'attractions' | 'traffic' | 'event-detail' | 'accommodation-detail';
 
 interface SearchResponse<T> {
   success: boolean;
@@ -64,6 +131,18 @@ export const localInfoApi = {
     return data;
   },
 
+  async getEventDetail(location: string, slug: string, county?: string): Promise<SearchResponse<{ event: EventDetail }>> {
+    const { data, error } = await supabase.functions.invoke('search-local-info', {
+      body: { query: location, type: 'event-detail', location, county, slug },
+    });
+
+    if (error) {
+      console.error('Error fetching event detail:', error);
+      return { success: false, error: error.message };
+    }
+    return data;
+  },
+
   async searchAccommodations(location: string, county?: string): Promise<SearchResponse<{ accommodations: Accommodation[] }>> {
     const { data, error } = await supabase.functions.invoke('search-local-info', {
       body: { query: location, type: 'accommodations', location, county },
@@ -71,6 +150,18 @@ export const localInfoApi = {
 
     if (error) {
       console.error('Error fetching accommodations:', error);
+      return { success: false, error: error.message };
+    }
+    return data;
+  },
+
+  async getAccommodationDetail(location: string, slug: string, county?: string): Promise<SearchResponse<{ accommodation: AccommodationDetail }>> {
+    const { data, error } = await supabase.functions.invoke('search-local-info', {
+      body: { query: location, type: 'accommodation-detail', location, county, slug },
+    });
+
+    if (error) {
+      console.error('Error fetching accommodation detail:', error);
       return { success: false, error: error.message };
     }
     return data;
