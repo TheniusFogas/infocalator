@@ -1,81 +1,46 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { AttractionCard } from "@/components/AttractionCard";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search } from "lucide-react";
-
-const attractions = [
-  {
-    title: "Drumul Peșterilor din Apuseni",
-    description: "Drumul Peșterilor din Apuseni oferă o incursiune fascinantă în lumea subterană a Munților Apuseni, dezvăluind peisaje spectaculoase și formațiuni geologice unice.",
-    image: "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/Coiba_Mare_Portal.jpg/500px-Coiba_Mare_Portal.jpg",
-    category: "Peșteră",
-    location: "Bihor",
-    views: 17,
-    date: "10 Ianuarie 2026"
-  },
-  {
-    title: "Craiova, Capitala Crăciunului din România",
-    description: "Craiova se transformă într-o veritabilă capitală a Crăciunului în România, printr-un decor festiv de poveste și evenimente culturale captivante.",
-    image: "https://image.stirileprotv.ro/media/images/1920x1080/Dec2025/62596676.jpg",
-    category: "Alt",
-    location: "Craiova",
-    views: 42,
-    date: "10 Ianuarie 2026"
-  },
-  {
-    title: "Cascada Bigăr – Farmecul Natural al Munților Aninei",
-    description: "Cascada Bigăr, situată în Munții Aninei din România, este renumită pentru frumusețea sa unică, apa căzând într-un mod spectaculos peste mușchiul verde.",
-    image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/94/Cascada_Big%C4%83r.JPG/800px-Cascada_Big%C4%83r.JPG",
-    category: "Cascadă",
-    location: "Caraș-Severin",
-    views: 4,
-    date: "10 Ianuarie 2026"
-  },
-  {
-    title: "Castelul Bran – Legenda lui Dracula",
-    description: "Castelul Bran, cunoscut popular ca și Castelul lui Dracula, este una dintre cele mai vizitate atracții turistice din România.",
-    image: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/Castelul_Bran.jpg/800px-Castelul_Bran.jpg",
-    category: "Castel",
-    location: "Brașov",
-    views: 156,
-    date: "8 Ianuarie 2026"
-  },
-  {
-    title: "Transfăgărășan – Cel mai frumos drum din lume",
-    description: "Transfăgărășanul este considerat unul dintre cele mai spectaculoase drumuri din lume, oferind priveliști uimitoare ale Munților Făgăraș.",
-    image: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Transfagarasan_serpentine.jpg/800px-Transfagarasan_serpentine.jpg",
-    category: "Drum",
-    location: "Argeș",
-    views: 89,
-    date: "5 Ianuarie 2026"
-  },
-  {
-    title: "Delta Dunării – Paradisul biodiversității",
-    description: "Delta Dunării este a doua deltă ca mărime din Europa și găzduiește o biodiversitate extraordinară, fiind un paradis pentru iubitorii naturii.",
-    image: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Danube_Delta_2020.jpg/800px-Danube_Delta_2020.jpg",
-    category: "Natură",
-    location: "Tulcea",
-    views: 67,
-    date: "3 Ianuarie 2026"
-  },
-];
+import { fetchAttractions, Attraction } from "@/services/routeService";
+import { format } from "date-fns";
+import { ro } from "date-fns/locale";
 
 const categories = ["Toate Categoriile", "Castel", "Cascadă", "Peșteră", "Natură", "Drum", "Alt"];
 
 const AtractiiPage = () => {
+  const [attractions, setAttractions] = useState<Attraction[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Toate Categoriile");
 
+  useEffect(() => {
+    const loadAttractions = async () => {
+      const data = await fetchAttractions();
+      setAttractions(data);
+      setLoading(false);
+    };
+    loadAttractions();
+  }, []);
+
   const filteredAttractions = attractions.filter((attraction) => {
     const matchesSearch = attraction.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         attraction.description.toLowerCase().includes(searchQuery.toLowerCase());
+                         (attraction.description?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
     const matchesCategory = selectedCategory === "Toate Categoriile" || 
                            attraction.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+
+  const formatDate = (dateString: string) => {
+    try {
+      return format(new Date(dateString), "d MMMM yyyy", { locale: ro });
+    } catch {
+      return dateString;
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -132,7 +97,7 @@ const AtractiiPage = () => {
         <section className="px-4 pb-4">
           <div className="container mx-auto">
             <p className="text-sm text-muted-foreground uppercase tracking-wide">
-              {filteredAttractions.length} destinații găsite
+              {loading ? "Se încarcă..." : `${filteredAttractions.length} destinații găsite`}
             </p>
           </div>
         </section>
@@ -140,20 +105,35 @@ const AtractiiPage = () => {
         {/* Attractions Grid */}
         <section className="px-4 pb-12">
           <div className="container mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredAttractions.map((attraction, index) => (
-                <AttractionCard
-                  key={index}
-                  title={attraction.title}
-                  description={attraction.description}
-                  image={attraction.image}
-                  category={attraction.category}
-                  location={attraction.location}
-                  views={attraction.views}
-                  date={attraction.date}
-                />
-              ))}
-            </div>
+            {loading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="attraction-card animate-pulse">
+                    <div className="h-48 bg-muted" />
+                    <div className="p-5 space-y-3">
+                      <div className="h-6 bg-muted rounded w-3/4" />
+                      <div className="h-4 bg-muted rounded w-full" />
+                      <div className="h-4 bg-muted rounded w-2/3" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredAttractions.map((attraction) => (
+                  <AttractionCard
+                    key={attraction.id}
+                    title={attraction.title}
+                    description={attraction.description || ""}
+                    image={attraction.image_url || "https://via.placeholder.com/400x300"}
+                    category={attraction.category}
+                    location={attraction.location}
+                    views={attraction.views}
+                    date={formatDate(attraction.created_at)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </section>
       </main>
