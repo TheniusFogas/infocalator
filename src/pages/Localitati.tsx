@@ -197,6 +197,7 @@ const LocalitatiPage = () => {
                     county={city.county}
                     population={city.population}
                     type="major"
+                    cityType={city.city_type}
                     onClick={() => navigate(`/localitati/${city.id}`)}
                   />
                 ))}
@@ -233,6 +234,7 @@ const LocalitatiPage = () => {
                         name={city.name}
                         county={city.county}
                         population={city.population}
+                        cityType={city.city_type}
                         onClick={() => navigate(`/localitati/${city.id}`)}
                       />
                     ))}

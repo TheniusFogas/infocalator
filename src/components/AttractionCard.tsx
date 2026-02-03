@@ -1,5 +1,6 @@
 import { MapPin, Calendar, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { attractionCategoryIcons, getCategoryIcon } from "@/lib/categoryIcons";
 
 interface AttractionCardProps {
   title: string;
@@ -22,6 +23,8 @@ export const AttractionCard = ({
   date,
   onClick
 }: AttractionCardProps) => {
+  const CategoryIcon = getCategoryIcon(category, attractionCategoryIcons);
+
   return (
     <div onClick={onClick} className="attraction-card cursor-pointer">
       {/* Image */}
@@ -31,7 +34,8 @@ export const AttractionCard = ({
           alt={title}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
         />
-        <Badge className="absolute top-3 left-3 bg-primary text-primary-foreground uppercase text-xs font-semibold">
+        <Badge className="absolute top-3 left-3 bg-primary text-primary-foreground uppercase text-xs font-semibold flex items-center gap-1">
+          <CategoryIcon className="w-3 h-3" />
           {category}
         </Badge>
       </div>

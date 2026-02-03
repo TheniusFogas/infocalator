@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Loader2, Lightbulb, Route, CircleDollarSign } from "lucide-react";
+import { AlertTriangle, Loader2, Lightbulb, Route, CircleDollarSign, Navigation } from "lucide-react";
 import { localInfoApi, TrafficInfo as TrafficInfoType } from "@/lib/api/localInfo";
+import { trafficStatusIcons } from "@/lib/categoryIcons";
 
 interface TrafficInfoProps {
   location: string;
@@ -10,9 +11,9 @@ interface TrafficInfoProps {
 }
 
 const statusColors: Record<string, string> = {
-  'Închis': 'bg-red-500/10 text-red-600 border-red-200',
-  'Restricționat': 'bg-yellow-500/10 text-yellow-600 border-yellow-200',
-  'Lucrări': 'bg-orange-500/10 text-orange-600 border-orange-200',
+  'Închis': 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800',
+  'Restricționat': 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800',
+  'Lucrări': 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800',
 };
 
 export const TrafficInfo = ({ location, county }: TrafficInfoProps) => {
@@ -83,19 +84,43 @@ export const TrafficInfo = ({ location, county }: TrafficInfoProps) => {
               Restricții rutiere
             </h4>
             <div className="space-y-2">
-              {trafficInfo.restrictions.map((restriction, index) => (
-                <div 
-                  key={index} 
-                  className={`p-3 rounded-lg border ${statusColors[restriction.status] || 'bg-muted'}`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium">{restriction.road}</span>
-                    <Badge variant="outline">{restriction.status}</Badge>
+              {trafficInfo.restrictions.map((restriction, index) => {
+                const StatusIcon = trafficStatusIcons[restriction.status] || trafficStatusIcons[restriction.icon || ''] || AlertTriangle;
+                return (
+                  <div 
+                    key={index} 
+                    className={`p-3 rounded-lg border ${statusColors[restriction.status] || 'bg-muted'}`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-medium flex items-center gap-2">
+                        <StatusIcon className="w-4 h-4" />
+                        {restriction.road}
+                      </span>
+                      <Badge variant="outline">{restriction.status}</Badge>
+                    </div>
+                    <p className="text-sm">{restriction.description}</p>
                   </div>
-                  <p className="text-sm">{restriction.description}</p>
-                </div>
-              ))}
+                );
+              })}
             </div>
+          </div>
+        )}
+
+        {/* Rute alternative */}
+        {trafficInfo.alternativeRoutes && trafficInfo.alternativeRoutes.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="font-medium text-foreground flex items-center gap-2 text-sm">
+              <Navigation className="w-4 h-4 text-primary" />
+              Rute alternative
+            </h4>
+            <ul className="space-y-1">
+              {trafficInfo.alternativeRoutes.map((route, index) => (
+                <li key={index} className="text-sm text-muted-foreground flex items-start gap-2">
+                  <span className="text-primary">→</span>
+                  {route}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
