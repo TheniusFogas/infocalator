@@ -12,12 +12,18 @@ import {
   Building2, 
   Navigation,
   CloudSun,
-  Calendar,
-  ExternalLink,
-  Landmark
+  Landmark,
+  Thermometer,
+  Wind,
+  Droplets
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchAttractions, Attraction } from "@/services/routeService";
+import { WeatherForecast } from "@/components/WeatherForecast";
+import { EventsList } from "@/components/EventsList";
+import { AccommodationsList } from "@/components/AccommodationsList";
+import { AIAttractionsList } from "@/components/AIAttractionsList";
+import { TrafficInfo } from "@/components/TrafficInfo";
 
 interface City {
   id: string;
@@ -33,6 +39,9 @@ interface City {
 interface WeatherData {
   temperature: number;
   description: string;
+  humidity: number;
+  windSpeed: number;
+  feelsLike: number;
   icon: string;
 }
 
@@ -58,7 +67,6 @@ const LocalitateDetailPage = () => {
       } else if (data) {
         setCity(data);
         
-        // Fetch weather
         if (data.latitude && data.longitude) {
           fetchWeather(data.latitude, data.longitude);
           fetchNearbyAttractions(data.latitude, data.longitude);
@@ -73,11 +81,12 @@ const LocalitateDetailPage = () => {
   const fetchWeather = async (lat: number, lng: number) => {
     try {
       const response = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,weather_code&timezone=auto`
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&timezone=auto`
       );
       
       if (response.ok) {
         const data = await response.json();
+        const current = data.current;
         const weatherDescriptions: Record<number, string> = {
           0: "Senin", 1: "Predominant senin", 2: "Parțial înnorat", 3: "Înnorat",
           45: "Ceață", 48: "Ceață cu chiciură", 51: "Burniță ușoară",
@@ -85,10 +94,13 @@ const LocalitateDetailPage = () => {
           80: "Averse ușoare", 95: "Furtună"
         };
         
-        const code = data.current.weather_code;
+        const code = current.weather_code;
         setWeather({
-          temperature: Math.round(data.current.temperature_2m),
+          temperature: Math.round(current.temperature_2m),
           description: weatherDescriptions[code] || "Necunoscut",
+          humidity: current.relative_humidity_2m,
+          windSpeed: Math.round(current.wind_speed_10m),
+          feelsLike: Math.round(current.apparent_temperature),
           icon: code === 0 ? "☀️" : code <= 3 ? "⛅" : code <= 48 ? "🌫️" : code <= 65 ? "🌧️" : "❄️"
         });
       }
@@ -215,14 +227,14 @@ const LocalitateDetailPage = () => {
                     <CardTitle className="text-lg">Informații</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                           <Users className="w-5 h-5 text-primary" />
                         </div>
                         <div>
                           <p className="text-sm text-muted-foreground">Populație</p>
-                          <p className="font-semibold text-foreground">{formatPopulation(city.population)} locuitori</p>
+                          <p className="font-semibold text-foreground">{formatPopulation(city.population)}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
@@ -234,17 +246,48 @@ const LocalitateDetailPage = () => {
                           <p className="font-semibold text-foreground">{city.county}</p>
                         </div>
                       </div>
+                      {weather && (
+                        <>
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                              <Thermometer className="w-5 h-5 text-primary" />
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Simțit</p>
+                              <p className="font-semibold text-foreground">{weather.feelsLike}°C</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                              <Droplets className="w-5 h-5 text-primary" />
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Umiditate</p>
+                              <p className="font-semibold text-foreground">{weather.humidity}%</p>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
 
-                {/* Nearby Attractions */}
+                {/* 7-Day Weather Forecast */}
+                {city.latitude && city.longitude && (
+                  <WeatherForecast 
+                    latitude={city.latitude} 
+                    longitude={city.longitude} 
+                    cityName={city.name}
+                  />
+                )}
+
+                {/* Nearby Attractions from DB */}
                 {nearbyAttractions.length > 0 && (
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg flex items-center gap-2">
                         <Building2 className="w-5 h-5 text-primary" />
-                        Atracții în apropiere
+                        Atracții în apropiere (din baza de date)
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -272,6 +315,12 @@ const LocalitateDetailPage = () => {
                     </CardContent>
                   </Card>
                 )}
+
+                {/* AI-Generated Content */}
+                <AIAttractionsList location={city.name} county={city.county} />
+                <EventsList location={city.name} county={city.county} />
+                <AccommodationsList location={city.name} county={city.county} />
+                <TrafficInfo location={city.name} county={city.county} />
               </div>
 
               {/* Sidebar */}
@@ -282,18 +331,6 @@ const LocalitateDetailPage = () => {
                     <CardTitle className="text-lg">Explorează</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <Button variant="outline" className="w-full justify-start gap-3" asChild>
-                      <a 
-                        href={`https://www.booking.com/searchresults.html?ss=${encodeURIComponent(city.name + ', Romania')}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <Building2 className="w-4 h-4" />
-                        Cazări în {city.name}
-                        <ExternalLink className="w-3 h-3 ml-auto" />
-                      </a>
-                    </Button>
-                    
                     <Button variant="outline" className="w-full justify-start gap-3" asChild>
                       <Link to={`/vremea?city=${encodeURIComponent(city.name)}`}>
                         <CloudSun className="w-4 h-4" />
@@ -309,23 +346,10 @@ const LocalitateDetailPage = () => {
                           rel="noopener noreferrer"
                         >
                           <Navigation className="w-4 h-4" />
-                          Navigare
-                          <ExternalLink className="w-3 h-3 ml-auto" />
+                          Navigare către {city.name}
                         </a>
                       </Button>
                     )}
-                    
-                    <Button variant="outline" className="w-full justify-start gap-3" asChild>
-                      <a 
-                        href={`https://www.google.com/search?q=${encodeURIComponent(city.name + ' evenimente')}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <Calendar className="w-4 h-4" />
-                        Evenimente
-                        <ExternalLink className="w-3 h-3 ml-auto" />
-                      </a>
-                    </Button>
                   </CardContent>
                 </Card>
 
