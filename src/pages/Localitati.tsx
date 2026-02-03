@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { CityCard } from "@/components/CityCard";
@@ -19,6 +20,7 @@ const counties = [
 const cityTypes = ["Toate", "Oraș", "Oraș mic", "Sat", "Comună"];
 
 const LocalitatiPage = () => {
+  const navigate = useNavigate();
   const [cities, setCities] = useState<City[]>([]);
   const [majorCities, setMajorCities] = useState<City[]>([]);
   const [loading, setLoading] = useState(true);
@@ -195,6 +197,7 @@ const LocalitatiPage = () => {
                     county={city.county}
                     population={city.population}
                     type="major"
+                    onClick={() => navigate(`/localitati/${city.id}`)}
                   />
                 ))}
               </div>
@@ -230,6 +233,7 @@ const LocalitatiPage = () => {
                         name={city.name}
                         county={city.county}
                         population={city.population}
+                        onClick={() => navigate(`/localitati/${city.id}`)}
                       />
                     ))}
                   </div>
