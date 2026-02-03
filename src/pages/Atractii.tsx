@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { AttractionCard } from "@/components/AttractionCard";
@@ -12,6 +13,7 @@ import { ro } from "date-fns/locale";
 const categories = ["Toate Categoriile", "Castel", "Cascadă", "Peșteră", "Natură", "Drum", "Alt"];
 
 const AtractiiPage = () => {
+  const navigate = useNavigate();
   const [attractions, setAttractions] = useState<Attraction[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -130,6 +132,7 @@ const AtractiiPage = () => {
                     location={attraction.location}
                     views={attraction.views}
                     date={formatDate(attraction.created_at)}
+                    onClick={() => navigate(`/atractii/${attraction.id}`)}
                   />
                 ))}
               </div>
