@@ -137,7 +137,7 @@
   }
   
   .attraction-card {
-    @apply bg-card rounded-xl overflow-hidden border border-border/50 shadow-sm hover:shadow-xl transition-all duration-300 group;
+    @apply bg-card rounded-xl overflow-hidden border border-border/50 shadow-sm hover:shadow-xl transition-all duration-300;
   }
   
   .city-card {
