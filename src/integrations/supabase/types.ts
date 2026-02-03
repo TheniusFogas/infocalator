@@ -14,7 +14,114 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      attractions: {
+        Row: {
+          category: string
+          county: string | null
+          created_at: string
+          description: string | null
+          id: string
+          image_url: string | null
+          latitude: number | null
+          location: string
+          longitude: number | null
+          title: string
+          updated_at: string
+          views: number
+        }
+        Insert: {
+          category?: string
+          county?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          latitude?: number | null
+          location: string
+          longitude?: number | null
+          title: string
+          updated_at?: string
+          views?: number
+        }
+        Update: {
+          category?: string
+          county?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          latitude?: number | null
+          location?: string
+          longitude?: number | null
+          title?: string
+          updated_at?: string
+          views?: number
+        }
+        Relationships: []
+      }
+      cities: {
+        Row: {
+          city_type: string
+          county: string
+          created_at: string
+          id: string
+          is_major: boolean
+          latitude: number | null
+          longitude: number | null
+          name: string
+          population: number
+        }
+        Insert: {
+          city_type?: string
+          county: string
+          created_at?: string
+          id?: string
+          is_major?: boolean
+          latitude?: number | null
+          longitude?: number | null
+          name: string
+          population?: number
+        }
+        Update: {
+          city_type?: string
+          county?: string
+          created_at?: string
+          id?: string
+          is_major?: boolean
+          latitude?: number | null
+          longitude?: number | null
+          name?: string
+          population?: number
+        }
+        Relationships: []
+      }
+      routes: {
+        Row: {
+          created_at: string
+          distance_km: number
+          duration_minutes: number | null
+          from_city: string
+          id: string
+          to_city: string
+        }
+        Insert: {
+          created_at?: string
+          distance_km: number
+          duration_minutes?: number | null
+          from_city: string
+          id?: string
+          to_city: string
+        }
+        Update: {
+          created_at?: string
+          distance_km?: number
+          duration_minutes?: number | null
+          from_city?: string
+          id?: string
+          to_city?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
