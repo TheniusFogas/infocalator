@@ -1,5 +1,4 @@
-import { useEffect, useState, useRef } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
+import { useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -38,20 +37,6 @@ interface RouteMapProps {
   routeCoordinates?: [number, number][];
 }
 
-// Component to fit bounds when route changes
-const FitBounds = ({ coords }: { coords: [number, number][] }) => {
-  const map = useMap();
-  
-  useEffect(() => {
-    if (coords.length >= 2) {
-      const bounds = L.latLngBounds(coords.map(c => [c[0], c[1]]));
-      map.fitBounds(bounds, { padding: [50, 50] });
-    }
-  }, [coords, map]);
-  
-  return null;
-};
-
 export const RouteMap = ({ 
   startCoords, 
   endCoords, 
@@ -60,49 +45,100 @@ export const RouteMap = ({
   routeCoordinates = []
 }: RouteMapProps) => {
   const romaniaCenter: [number, number] = [45.9432, 24.9668];
-  const hasRoute = startCoords && endCoords;
+  const mapDivRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const startMarkerRef = useRef<L.Marker | null>(null);
+  const endMarkerRef = useRef<L.Marker | null>(null);
+  const routeLineRef = useRef<L.Polyline | null>(null);
+
+  const boundsPadding = useMemo<[number, number]>(() => [50, 50], []);
+
+  // Initialize map once
+  useEffect(() => {
+    if (!mapDivRef.current || mapRef.current) return;
+
+    const map = L.map(mapDivRef.current, {
+      zoomControl: true,
+      attributionControl: true,
+    }).setView(romaniaCenter, 7);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+    }).addTo(map);
+
+    mapRef.current = map;
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      startMarkerRef.current = null;
+      endMarkerRef.current = null;
+      routeLineRef.current = null;
+    };
+  }, [romaniaCenter]);
+
+  // Update markers + route line when props change
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Clear existing layers
+    if (startMarkerRef.current) {
+      startMarkerRef.current.remove();
+      startMarkerRef.current = null;
+    }
+    if (endMarkerRef.current) {
+      endMarkerRef.current.remove();
+      endMarkerRef.current = null;
+    }
+    if (routeLineRef.current) {
+      routeLineRef.current.remove();
+      routeLineRef.current = null;
+    }
+
+    const fitCoords: [number, number][] = [];
+
+    if (startCoords) {
+      startMarkerRef.current = L.marker(startCoords, { icon: startIcon })
+        .addTo(map)
+        .bindPopup(startName);
+      fitCoords.push(startCoords);
+    }
+
+    if (endCoords) {
+      endMarkerRef.current = L.marker(endCoords, { icon: endIcon })
+        .addTo(map)
+        .bindPopup(endName);
+      fitCoords.push(endCoords);
+    }
+
+    if (routeCoordinates.length > 0) {
+      routeLineRef.current = L.polyline(routeCoordinates, {
+        color: "hsl(217 91% 60%)",
+        weight: 5,
+        opacity: 0.8,
+      }).addTo(map);
+
+      const bounds = L.latLngBounds(routeCoordinates.map((c) => [c[0], c[1]]));
+      map.fitBounds(bounds, { padding: boundsPadding });
+      return;
+    }
+
+    if (fitCoords.length >= 2) {
+      const bounds = L.latLngBounds(fitCoords.map((c) => [c[0], c[1]]));
+      map.fitBounds(bounds, { padding: boundsPadding });
+      return;
+    }
+
+    // Default view
+    map.setView(romaniaCenter, 7);
+  }, [startCoords, endCoords, startName, endName, routeCoordinates, romaniaCenter, boundsPadding]);
   
   return (
     <div className="w-full h-full rounded-xl overflow-hidden">
-      <MapContainer
-        center={romaniaCenter}
-        zoom={7}
-        className="w-full h-full min-h-[300px]"
-        style={{ height: "100%", minHeight: "300px" }}
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-        
-        {startCoords && (
-          <Marker position={startCoords} icon={startIcon}>
-            <Popup>{startName}</Popup>
-          </Marker>
-        )}
-        
-        {endCoords && (
-          <Marker position={endCoords} icon={endIcon}>
-            <Popup>{endName}</Popup>
-          </Marker>
-        )}
-        
-        {routeCoordinates.length > 0 && (
-          <>
-            <Polyline 
-              positions={routeCoordinates} 
-              color="#3b82f6" 
-              weight={5}
-              opacity={0.8}
-            />
-            <FitBounds coords={routeCoordinates} />
-          </>
-        )}
-        
-        {hasRoute && routeCoordinates.length === 0 && (
-          <FitBounds coords={[startCoords, endCoords]} />
-        )}
-      </MapContainer>
+      <div ref={mapDivRef} className="w-full h-full min-h-[300px]" style={{ height: "100%", minHeight: "300px" }} />
     </div>
   );
 };
