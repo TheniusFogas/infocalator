@@ -17,6 +17,9 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ro } from "date-fns/locale";
+import { EventsList } from "@/components/EventsList";
+import { AccommodationsList } from "@/components/AccommodationsList";
+import { AIAttractionsList } from "@/components/AIAttractionsList";
 
 interface Attraction {
   id: string;
@@ -174,6 +177,13 @@ const AtractieDetailPage = () => {
                   <p className="text-foreground leading-relaxed">
                     {attraction.description || "Nu există o descriere disponibilă pentru această atracție."}
                   </p>
+                </div>
+
+                {/* AI-Generated Related Content */}
+                <div className="space-y-6 pt-6">
+                  <AIAttractionsList location={attraction.location} county={attraction.county || undefined} />
+                  <EventsList location={attraction.location} county={attraction.county || undefined} />
+                  <AccommodationsList location={attraction.location} county={attraction.county || undefined} />
                 </div>
               </div>
 
