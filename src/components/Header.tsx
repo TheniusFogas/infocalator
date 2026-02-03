@@ -1,4 +1,4 @@
-import { Navigation, MapPin, Building2, Globe } from "lucide-react";
+import { Navigation, MapPin, Building2, Globe, CloudSun } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +48,19 @@ export const Header = () => {
             >
               <MapPin className="w-4 h-4" />
               <span className="hidden sm:inline">Localități</span>
+            </Link>
+            
+            <Link 
+              to="/vremea" 
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-medium",
+                isActive("/vremea") 
+                  ? "bg-white/20" 
+                  : "hover:bg-white/10"
+              )}
+            >
+              <CloudSun className="w-4 h-4" />
+              <span className="hidden sm:inline">Vremea</span>
             </Link>
             
             <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-all text-sm font-medium ml-2">
