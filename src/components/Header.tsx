@@ -1,9 +1,13 @@
-import { Navigation, MapPin, Building2, Globe, CloudSun } from "lucide-react";
+import { MapPin, Building2, CloudSun, Home } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { Logo } from "./Logo";
+import { LanguageSelector } from "./LanguageSelector";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
 
 export const Header = () => {
   const location = useLocation();
+  const { t } = useLanguage();
   
   const isActive = (path: string) => location.pathname === path;
   
@@ -12,61 +16,63 @@ export const Header = () => {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
-            <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-              <Navigation className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="font-bold text-lg leading-tight">Distanțe Rutiere România</h1>
-              <p className="text-xs opacity-80">Calculator Trafic & Planificator Rute</p>
-            </div>
-          </Link>
+          <Logo />
           
           {/* Navigation */}
-          <nav className="flex items-center gap-2">
+          <nav className="flex items-center gap-1 sm:gap-2">
             <Link 
               to="/atractii" 
               className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-medium",
+                "flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-sm font-medium",
                 isActive("/atractii") 
                   ? "bg-white/20" 
                   : "hover:bg-white/10"
               )}
             >
               <Building2 className="w-4 h-4" />
-              <span className="hidden sm:inline">Atracții</span>
+              <span className="hidden sm:inline">{t('nav.attractions')}</span>
             </Link>
             
             <Link 
               to="/localitati" 
               className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-medium",
+                "flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-sm font-medium",
                 isActive("/localitati") 
                   ? "bg-white/20" 
                   : "hover:bg-white/10"
               )}
             >
               <MapPin className="w-4 h-4" />
-              <span className="hidden sm:inline">Localități</span>
+              <span className="hidden sm:inline">{t('nav.localities')}</span>
+            </Link>
+            
+            <Link 
+              to="/cazari" 
+              className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-sm font-medium",
+                isActive("/cazari") 
+                  ? "bg-white/20" 
+                  : "hover:bg-white/10"
+              )}
+            >
+              <Home className="w-4 h-4" />
+              <span className="hidden sm:inline">{t('nav.accommodations')}</span>
             </Link>
             
             <Link 
               to="/vremea" 
               className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg transition-all text-sm font-medium",
+                "flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-sm font-medium",
                 isActive("/vremea") 
                   ? "bg-white/20" 
                   : "hover:bg-white/10"
               )}
             >
               <CloudSun className="w-4 h-4" />
-              <span className="hidden sm:inline">Vremea</span>
+              <span className="hidden sm:inline">{t('nav.weather')}</span>
             </Link>
             
-            <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-all text-sm font-medium ml-2">
-              <Globe className="w-4 h-4" />
-              <span>RO</span>
-            </button>
+            <LanguageSelector />
           </nav>
         </div>
       </div>

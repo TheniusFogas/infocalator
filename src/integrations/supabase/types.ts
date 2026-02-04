@@ -14,6 +14,105 @@ export type Database = {
   }
   public: {
     Tables: {
+      ad_zones: {
+        Row: {
+          ad_code: string | null
+          ad_type: string
+          created_at: string
+          id: string
+          is_active: boolean | null
+          name: string
+          placement: string | null
+          updated_at: string
+          zone_key: string
+        }
+        Insert: {
+          ad_code?: string | null
+          ad_type?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          name: string
+          placement?: string | null
+          updated_at?: string
+          zone_key: string
+        }
+        Update: {
+          ad_code?: string | null
+          ad_type?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          placement?: string | null
+          updated_at?: string
+          zone_key?: string
+        }
+        Relationships: []
+      }
+      admin_users: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      affiliate_links: {
+        Row: {
+          affiliate_id: string | null
+          base_url: string
+          created_at: string
+          id: string
+          is_active: boolean | null
+          logo_url: string | null
+          platform: string
+          priority: number | null
+          tracking_params: string | null
+          updated_at: string
+        }
+        Insert: {
+          affiliate_id?: string | null
+          base_url: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          logo_url?: string | null
+          platform: string
+          priority?: number | null
+          tracking_params?: string | null
+          updated_at?: string
+        }
+        Update: {
+          affiliate_id?: string | null
+          base_url?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          logo_url?: string | null
+          platform?: string
+          priority?: number | null
+          tracking_params?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       attractions: {
         Row: {
           category: string
@@ -56,6 +155,273 @@ export type Database = {
           title?: string
           updated_at?: string
           views?: number
+        }
+        Relationships: []
+      }
+      cached_accommodations: {
+        Row: {
+          address: string | null
+          amenities: string[] | null
+          booking_tips: string[] | null
+          check_in: string | null
+          check_out: string | null
+          contact: Json | null
+          county: string | null
+          created_at: string
+          currency: string | null
+          description: string | null
+          expires_at: string
+          facilities: string[] | null
+          highlights: string[] | null
+          id: string
+          image_keywords: string | null
+          latitude: number | null
+          location: string
+          long_description: string | null
+          longitude: number | null
+          name: string
+          nearby_attractions: Json | null
+          policies: Json | null
+          price_max: number | null
+          price_min: number | null
+          price_range: string | null
+          rating: number | null
+          review_count: number | null
+          reviews: Json | null
+          room_types: Json | null
+          slug: string
+          stars: number | null
+          type: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          amenities?: string[] | null
+          booking_tips?: string[] | null
+          check_in?: string | null
+          check_out?: string | null
+          contact?: Json | null
+          county?: string | null
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          expires_at: string
+          facilities?: string[] | null
+          highlights?: string[] | null
+          id?: string
+          image_keywords?: string | null
+          latitude?: number | null
+          location: string
+          long_description?: string | null
+          longitude?: number | null
+          name: string
+          nearby_attractions?: Json | null
+          policies?: Json | null
+          price_max?: number | null
+          price_min?: number | null
+          price_range?: string | null
+          rating?: number | null
+          review_count?: number | null
+          reviews?: Json | null
+          room_types?: Json | null
+          slug: string
+          stars?: number | null
+          type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          amenities?: string[] | null
+          booking_tips?: string[] | null
+          check_in?: string | null
+          check_out?: string | null
+          contact?: Json | null
+          county?: string | null
+          created_at?: string
+          currency?: string | null
+          description?: string | null
+          expires_at?: string
+          facilities?: string[] | null
+          highlights?: string[] | null
+          id?: string
+          image_keywords?: string | null
+          latitude?: number | null
+          location?: string
+          long_description?: string | null
+          longitude?: number | null
+          name?: string
+          nearby_attractions?: Json | null
+          policies?: Json | null
+          price_max?: number | null
+          price_min?: number | null
+          price_range?: string | null
+          rating?: number | null
+          review_count?: number | null
+          reviews?: Json | null
+          room_types?: Json | null
+          slug?: string
+          stars?: number | null
+          type?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cached_attractions: {
+        Row: {
+          category: string | null
+          county: string | null
+          created_at: string
+          description: string | null
+          duration: string | null
+          entry_fee: string | null
+          expires_at: string
+          id: string
+          image_keywords: string | null
+          is_paid: boolean | null
+          latitude: number | null
+          location: string
+          longitude: number | null
+          opening_hours: string | null
+          slug: string
+          tips: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          county?: string | null
+          created_at?: string
+          description?: string | null
+          duration?: string | null
+          entry_fee?: string | null
+          expires_at: string
+          id?: string
+          image_keywords?: string | null
+          is_paid?: boolean | null
+          latitude?: number | null
+          location: string
+          longitude?: number | null
+          opening_hours?: string | null
+          slug: string
+          tips?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          county?: string | null
+          created_at?: string
+          description?: string | null
+          duration?: string | null
+          entry_fee?: string | null
+          expires_at?: string
+          id?: string
+          image_keywords?: string | null
+          is_paid?: boolean | null
+          latitude?: number | null
+          location?: string
+          longitude?: number | null
+          opening_hours?: string | null
+          slug?: string
+          tips?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cached_events: {
+        Row: {
+          accessibility: string | null
+          category: string | null
+          county: string | null
+          created_at: string
+          date: string | null
+          description: string | null
+          end_date: string | null
+          expires_at: string
+          facilities: string[] | null
+          highlights: string[] | null
+          id: string
+          image_keywords: string | null
+          is_paid: boolean | null
+          latitude: number | null
+          location: string
+          long_description: string | null
+          longitude: number | null
+          nearby_attractions: string[] | null
+          organizer: string | null
+          organizer_contact: string | null
+          schedule: Json | null
+          slug: string
+          ticket_price: string | null
+          ticket_url: string | null
+          time: string | null
+          tips: string[] | null
+          title: string
+          updated_at: string
+          venue: string | null
+        }
+        Insert: {
+          accessibility?: string | null
+          category?: string | null
+          county?: string | null
+          created_at?: string
+          date?: string | null
+          description?: string | null
+          end_date?: string | null
+          expires_at: string
+          facilities?: string[] | null
+          highlights?: string[] | null
+          id?: string
+          image_keywords?: string | null
+          is_paid?: boolean | null
+          latitude?: number | null
+          location: string
+          long_description?: string | null
+          longitude?: number | null
+          nearby_attractions?: string[] | null
+          organizer?: string | null
+          organizer_contact?: string | null
+          schedule?: Json | null
+          slug: string
+          ticket_price?: string | null
+          ticket_url?: string | null
+          time?: string | null
+          tips?: string[] | null
+          title: string
+          updated_at?: string
+          venue?: string | null
+        }
+        Update: {
+          accessibility?: string | null
+          category?: string | null
+          county?: string | null
+          created_at?: string
+          date?: string | null
+          description?: string | null
+          end_date?: string | null
+          expires_at?: string
+          facilities?: string[] | null
+          highlights?: string[] | null
+          id?: string
+          image_keywords?: string | null
+          is_paid?: boolean | null
+          latitude?: number | null
+          location?: string
+          long_description?: string | null
+          longitude?: number | null
+          nearby_attractions?: string[] | null
+          organizer?: string | null
+          organizer_contact?: string | null
+          schedule?: Json | null
+          slug?: string
+          ticket_price?: string | null
+          ticket_url?: string | null
+          time?: string | null
+          tips?: string[] | null
+          title?: string
+          updated_at?: string
+          venue?: string | null
         }
         Relationships: []
       }
@@ -119,6 +485,36 @@ export type Database = {
           from_city?: string
           id?: string
           to_city?: string
+        }
+        Relationships: []
+      }
+      site_settings: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          setting_key: string
+          setting_type: string | null
+          setting_value: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          setting_key: string
+          setting_type?: string | null
+          setting_value?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          setting_key?: string
+          setting_type?: string | null
+          setting_value?: string | null
+          updated_at?: string
         }
         Relationships: []
       }

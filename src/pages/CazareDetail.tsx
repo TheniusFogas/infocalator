@@ -32,7 +32,11 @@ import {
   Cigarette
 } from "lucide-react";
 import { localInfoApi, AccommodationDetail } from "@/lib/api/localInfo";
-import { WeatherForecast } from "@/components/WeatherForecast";
+import { WeatherWidget } from "@/components/WeatherWidget";
+import { AffiliateBookingLinks } from "@/components/AffiliateBookingLinks";
+import { RecommendedAccommodations } from "@/components/RecommendedAccommodations";
+import { RecommendedAttractions } from "@/components/RecommendedAttractions";
+import { AdZone } from "@/components/AdZone";
 import { accommodationTypeIcons, amenityIcons, getCategoryIcon, getPlaceholderImage, priceRangeColors } from "@/lib/categoryIcons";
 
 const CazareDetailPage = () => {
@@ -339,14 +343,18 @@ const CazareDetailPage = () => {
                   </Card>
                 )}
 
-                {/* Weather */}
+                {/* Weather Widget */}
                 {accommodation.coordinates && (
-                  <WeatherForecast 
+                  <WeatherWidget 
                     latitude={accommodation.coordinates.lat} 
                     longitude={accommodation.coordinates.lng}
                     cityName={accommodation.city || location}
+                    compact
                   />
                 )}
+
+                {/* Ad Zone */}
+                <AdZone zoneKey="in_content" />
               </div>
 
               {/* Sidebar */}
@@ -367,16 +375,12 @@ const CazareDetailPage = () => {
                       )}
                     </div>
                     
-                    <Button className="w-full gap-2" asChild>
-                      <a 
-                        href={`https://www.booking.com/searchresults.html?ss=${encodeURIComponent(accommodation.name + ' ' + (accommodation.city || location))}`}
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                      >
-                        Rezervă acum
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </Button>
+                    {/* Affiliate Booking Links */}
+                    <AffiliateBookingLinks 
+                      accommodationName={accommodation.name} 
+                      location={accommodation.city || location}
+                      showAll
+                    />
                   </CardContent>
                 </Card>
 
@@ -482,6 +486,19 @@ const CazareDetailPage = () => {
                     </CardContent>
                   </Card>
                 )}
+
+                {/* Recommended Accommodations */}
+                <RecommendedAccommodations 
+                  currentSlug={slug} 
+                  location={location}
+                  limit={4}
+                />
+
+                {/* Recommended Attractions */}
+                <RecommendedAttractions 
+                  location={location}
+                  limit={4}
+                />
               </div>
             </div>
           </div>
