@@ -88,9 +88,27 @@ export const RoadStatusWidget = () => {
             );
           })}
         </div>
-        <p className="text-xs text-muted-foreground mt-4 text-center">
-          Actualizat automat din surse oficiale. Pentru informații în timp real, verificați CNAIR.
-        </p>
+        <div className="mt-4 pt-4 border-t border-border flex items-center justify-center gap-4">
+          <p className="text-xs text-muted-foreground">
+            Pentru informații în timp real:
+          </p>
+          <a 
+            href="https://www.infotrafic.ro/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-xs text-primary hover:underline"
+          >
+            InfoTrafic.ro →
+          </a>
+          <a 
+            href="https://www.cnair.ro/index.php/ro/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-xs text-primary hover:underline"
+          >
+            CNAIR.ro →
+          </a>
+        </div>
       </CardContent>
     </Card>
   );

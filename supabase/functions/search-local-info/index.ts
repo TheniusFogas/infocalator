@@ -1,15 +1,20 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 interface SearchRequest {
   query: string;
-  type: 'events' | 'accommodations' | 'attractions' | 'traffic' | 'event-detail' | 'accommodation-detail' | 'all';
+  type: 'events' | 'accommodations' | 'attractions' | 'traffic' | 'event-detail' | 'accommodation-detail' | 'attraction-detail' | 'all';
   location: string;
   county?: string;
   slug?: string;
 }
+
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -19,18 +24,81 @@ Deno.serve(async (req) => {
   try {
     const { query, type, location, county, slug } = await req.json() as SearchRequest;
     
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // Try to get from cache first for detail pages
+    if ((type === 'event-detail' || type === 'accommodation-detail' || type === 'attraction-detail') && slug) {
+      const tableName = type === 'event-detail' 
+        ? 'cached_events' 
+        : type === 'accommodation-detail' 
+          ? 'cached_accommodations' 
+          : 'cached_attractions';
+      
+      const { data: cachedData } = await supabase
+        .from(tableName)
+        .select('*')
+        .eq('slug', slug)
+        .eq('location', location)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
+      
+      if (cachedData) {
+        console.log(`Cache hit for ${type}: ${slug}`);
+        const responseKey = type === 'event-detail' 
+          ? 'event' 
+          : type === 'accommodation-detail' 
+            ? 'accommodation' 
+            : 'attraction';
+        return new Response(
+          JSON.stringify({ success: true, data: { [responseKey]: transformCachedData(cachedData, type) }, type, cached: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    // For list types, check cache first
+    if (type === 'events' || type === 'accommodations' || type === 'attractions') {
+      const tableName = type === 'events' 
+        ? 'cached_events' 
+        : type === 'accommodations' 
+          ? 'cached_accommodations' 
+          : 'cached_attractions';
+      
+      const { data: cachedList } = await supabase
+        .from(tableName)
+        .select('*')
+        .eq('location', location)
+        .gt('expires_at', new Date().toISOString())
+        .limit(20);
+      
+      if (cachedList && cachedList.length > 0) {
+        console.log(`Cache hit for ${type} list: ${location} (${cachedList.length} items)`);
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            data: { [type]: cachedList.map(item => transformCachedData(item, type)) }, 
+            type, 
+            cached: true 
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+    
     const apiKey = Deno.env.get('LOVABLE_API_KEY');
     if (!apiKey) {
       throw new Error('LOVABLE_API_KEY not configured');
     }
 
     const locationContext = county ? `${location}, ${county}, România` : `${location}, România`;
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().toLocaleString('ro-RO', { month: 'long' });
     
     let prompt = '';
     
     switch (type) {
       case 'events':
-        prompt = `Ești un asistent care găsește evenimente locale în România. Caută și listează evenimentele care au loc sau vor avea loc în ${locationContext}. Include festivaluri, concerte, târguri, evenimente culturale, sportive și comunitare.
+        prompt = `Ești un asistent care găsește evenimente locale în România. Data actuală este ${currentMonth} ${currentYear}. Caută și listează DOAR evenimentele care VOR AVEA LOC în viitorul apropiat (următoarele 6 luni) în ${locationContext}. NU include evenimente care au avut loc în trecut!
 
 Returnează răspunsul STRICT în format JSON astfel:
 {
@@ -38,8 +106,8 @@ Returnează răspunsul STRICT în format JSON astfel:
     {
       "title": "Numele evenimentului",
       "slug": "nume-eveniment-unic",
-      "date": "15 Februarie 2025",
-      "endDate": "17 Februarie 2025 (sau null dacă e o singură zi)",
+      "date": "15 Martie ${currentYear}",
+      "endDate": "17 Martie ${currentYear} (sau null dacă e o singură zi)",
       "time": "10:00 - 22:00",
       "location": "Locația exactă, adresa",
       "city": "${location}",
@@ -55,19 +123,19 @@ Returnează răspunsul STRICT în format JSON astfel:
   ]
 }
 
-Dacă nu găsești evenimente specifice, include evenimente tradiționale/anuale ale zonei. Returnează maxim 12 evenimente. ASIGURĂ-TE că fiecare eveniment are un slug unic și dată validă.`;
+IMPORTANT: Datele trebuie să fie în viitor (${currentYear} sau după)! Include evenimente tradiționale/anuale ale zonei care vor avea loc în curând. Maxim 12 evenimente.`;
         break;
 
       case 'event-detail':
-        prompt = `Ești un expert în evenimente din România. Generează informații detaliate pentru un eveniment cu identificatorul "${slug}" din ${locationContext}.
+        prompt = `Ești un expert în evenimente din România. Data actuală este ${currentMonth} ${currentYear}. Generează informații detaliate pentru un eveniment cu identificatorul "${slug}" din ${locationContext}.
 
 Returnează răspunsul STRICT în format JSON astfel:
 {
   "event": {
     "title": "Numele complet al evenimentului",
     "slug": "${slug}",
-    "date": "15 Februarie 2025",
-    "endDate": "17 Februarie 2025 sau null",
+    "date": "15 Martie ${currentYear}",
+    "endDate": "17 Martie ${currentYear} sau null",
     "time": "10:00 - 22:00",
     "location": "Adresa completă a locației",
     "city": "${location}",
@@ -91,8 +159,8 @@ Returnează răspunsul STRICT în format JSON astfel:
     ],
     "highlights": ["Atracție principală 1", "Atracție 2", "Atracție 3", "Atracție 4"],
     "schedule": [
-      {"day": "Vineri, 15 Feb", "activities": ["10:00 - Deschidere oficială", "14:00 - Concert X", "20:00 - Show principal"]},
-      {"day": "Sâmbătă, 16 Feb", "activities": ["11:00 - Workshop", "16:00 - Competiție", "21:00 - Petrecere"]}
+      {"day": "Vineri, 15 Mar", "activities": ["10:00 - Deschidere oficială", "14:00 - Concert X", "20:00 - Show principal"]},
+      {"day": "Sâmbătă, 16 Mar", "activities": ["11:00 - Workshop", "16:00 - Competiție", "21:00 - Petrecere"]}
     ],
     "facilities": ["Parcare", "Toalete", "Food court", "Zonă copii"],
     "accessibility": "Accesibil pentru persoane cu dizabilități",
@@ -102,11 +170,11 @@ Returnează răspunsul STRICT în format JSON astfel:
   }
 }
 
-Generează informații realiste și utile pentru vizitatori. Imaginile sunt keywords pentru Unsplash.`;
+IMPORTANT: Data trebuie să fie în viitor (${currentYear} sau după)! Dacă evenimentul original a fost în trecut, actualizează-l pentru ediția viitoare.`;
         break;
         
       case 'accommodations':
-        prompt = `Ești un asistent care recomandă cazări în România. Caută și listează opțiuni de cazare în ${locationContext}. Include hoteluri, pensiuni, cabane, apartamente și camping-uri.
+        prompt = `Ești un asistent care recomandă cazări în România. Caută și listează opțiuni de cazare REALE în ${locationContext}. Include hoteluri, pensiuni, cabane, apartamente.
 
 Returnează răspunsul STRICT în format JSON astfel:
 {
@@ -129,7 +197,7 @@ Returnează răspunsul STRICT în format JSON astfel:
   ]
 }
 
-Returnează maxim 12 opțiuni de cazare populare sau recomandate. ASIGURĂ-TE că fiecare cazare are un slug unic.`;
+Returnează maxim 12 opțiuni de cazare populare. Fiecare cazare trebuie să aibă un slug unic.`;
         break;
 
       case 'accommodation-detail':
@@ -148,6 +216,7 @@ Returnează răspunsul STRICT în format JSON astfel:
     "city": "${location}",
     "county": "${county || 'România'}",
     "pricePerNight": {"min": 150, "max": 350, "currency": "RON"},
+    "priceRange": "Mediu",
     "rating": 4.5,
     "reviewCount": 234,
     "checkIn": "14:00",
@@ -178,8 +247,8 @@ Returnează răspunsul STRICT în format JSON astfel:
       {"name": "Centrul orașului", "distance": "500 m"}
     ],
     "reviews": [
-      {"author": "Maria P.", "rating": 5, "text": "Locație excelentă, personal amabil!", "date": "Ianuarie 2025"},
-      {"author": "Ion D.", "rating": 4, "text": "Cameră curată, mic dejun bun.", "date": "Decembrie 2024"}
+      {"author": "Maria P.", "rating": 5, "text": "Locație excelentă, personal amabil!", "date": "Ianuarie ${currentYear}"},
+      {"author": "Ion D.", "rating": 4, "text": "Cameră curată, mic dejun bun.", "date": "Decembrie ${currentYear - 1}"}
     ],
     "contact": {
       "phone": "+40 XXX XXX XXX",
@@ -189,9 +258,7 @@ Returnează răspunsul STRICT în format JSON astfel:
     "coordinates": {"lat": 44.4268, "lng": 26.1025},
     "bookingTips": ["Rezervă din timp în sezon", "Cere cameră cu vedere", "Verifică ofertele speciale"]
   }
-}
-
-Generează informații realiste și utile. Imaginile sunt keywords pentru căutare imagini.`;
+}`;
         break;
         
       case 'attractions':
@@ -226,7 +293,46 @@ Returnează răspunsul STRICT în format JSON astfel:
   ]
 }
 
-Returnează toate atracțiile pe care le cunoști din zonă (maxim 20). ASIGURĂ-TE că fiecare atracție are un slug unic.`;
+Returnează toate atracțiile pe care le cunoști din zonă (maxim 20). Fiecare atracție trebuie să aibă un slug unic.`;
+        break;
+
+      case 'attraction-detail':
+        prompt = `Ești un expert în turism românesc. Generează informații foarte detaliate pentru o atracție turistică cu identificatorul "${slug}" din ${locationContext}.
+
+Returnează răspunsul STRICT în format JSON astfel:
+{
+  "attraction": {
+    "title": "Numele complet al atracției",
+    "slug": "${slug}",
+    "category": "Muzeu/Natură/Istoric/Religios/Recreere/Traseu/Cascadă/Peșteră/Castel/Lac",
+    "description": "Descriere detaliată în română (3-4 propoziții)",
+    "longDescription": "Descriere extinsă cu istoria, ce poți vedea, de ce merită vizitat (2-3 paragrafe)",
+    "location": "Adresa sau locația exactă",
+    "city": "${location}",
+    "county": "${county || 'România'}",
+    "images": [
+      {"url": "romanian castle medieval architecture", "alt": "Imagine principală", "type": "main"},
+      {"url": "castle interior museum display", "alt": "Interior", "type": "gallery"},
+      {"url": "castle garden flowers", "alt": "Grădină", "type": "gallery"},
+      {"url": "castle tower historical", "alt": "Turn", "type": "gallery"},
+      {"url": "castle panoramic view", "alt": "Panoramă", "type": "gallery"},
+      {"url": "castle entrance gate", "alt": "Intrare", "type": "gallery"}
+    ],
+    "tips": ["Sfat pentru vizitatori 1", "Sfat 2", "Sfat 3"],
+    "isPaid": true/false,
+    "entryFee": "20 RON",
+    "openingHours": "09:00 - 17:00",
+    "duration": "1-2 ore",
+    "facilities": ["Parcare", "Ghid audio", "Magazin suveniruri", "Cafenea"],
+    "accessibility": "Parțial accesibil pentru persoane cu mobilitate redusă",
+    "bestTimeToVisit": "Primăvara și toamna pentru vreme plăcută",
+    "nearbyAttractions": [
+      {"name": "Altă atracție", "distance": "5 km"},
+      {"name": "Centrul orașului", "distance": "2 km"}
+    ],
+    "coordinates": {"lat": 44.4268, "lng": 26.1025}
+  }
+}`;
         break;
         
       case 'traffic':
@@ -315,6 +421,79 @@ Returnează răspunsul STRICT în format JSON astfel:
       parsedContent = { error: 'Failed to parse response', raw: content };
     }
 
+    // Cache the results
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24); // 24 hour cache
+
+    if (type === 'events' && parsedContent.events) {
+      for (const event of parsedContent.events) {
+        const eventExpires = event.date ? calculateEventExpiry(event.date) : expiresAt;
+        await supabase.from('cached_events').upsert({
+          slug: event.slug,
+          location: location,
+          county: county,
+          title: event.title,
+          description: event.description,
+          category: event.category,
+          date: event.date,
+          end_date: event.endDate,
+          time: event.time,
+          venue: event.location,
+          is_paid: event.isPaid,
+          ticket_price: event.ticketPrice,
+          ticket_url: event.ticketUrl,
+          organizer: event.organizer,
+          image_keywords: event.imageKeywords,
+          highlights: event.highlights,
+          expires_at: eventExpires.toISOString(),
+        }, { onConflict: 'slug,location' });
+      }
+    }
+
+    if (type === 'accommodations' && parsedContent.accommodations) {
+      for (const acc of parsedContent.accommodations) {
+        await supabase.from('cached_accommodations').upsert({
+          slug: acc.slug,
+          location: location,
+          county: county,
+          name: acc.name,
+          type: acc.type,
+          description: acc.description,
+          price_range: acc.priceRange,
+          price_min: acc.pricePerNight?.min,
+          price_max: acc.pricePerNight?.max,
+          currency: acc.pricePerNight?.currency || 'RON',
+          rating: acc.rating,
+          review_count: acc.reviewCount,
+          amenities: acc.amenities,
+          address: acc.address,
+          image_keywords: acc.imageKeywords,
+          highlights: acc.highlights,
+          expires_at: expiresAt.toISOString(),
+        }, { onConflict: 'slug,location' });
+      }
+    }
+
+    if (type === 'attractions' && parsedContent.attractions) {
+      for (const attr of parsedContent.attractions) {
+        await supabase.from('cached_attractions').upsert({
+          slug: attr.slug,
+          location: location,
+          county: county,
+          title: attr.title,
+          category: attr.category,
+          description: attr.description,
+          tips: attr.tips,
+          image_keywords: attr.imageKeywords,
+          is_paid: attr.isPaid,
+          entry_fee: attr.entryFee,
+          opening_hours: attr.openingHours,
+          duration: attr.duration,
+          expires_at: expiresAt.toISOString(),
+        }, { onConflict: 'slug,location' });
+      }
+    }
+
     return new Response(
       JSON.stringify({ success: true, data: parsedContent, type }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -328,3 +507,115 @@ Returnează răspunsul STRICT în format JSON astfel:
     );
   }
 });
+
+function transformCachedData(data: any, type: string): any {
+  if (type === 'event-detail' || type === 'events') {
+    return {
+      title: data.title,
+      slug: data.slug,
+      date: data.date,
+      endDate: data.end_date,
+      time: data.time,
+      location: data.venue,
+      city: data.location,
+      description: data.description,
+      longDescription: data.long_description,
+      category: data.category,
+      isPaid: data.is_paid,
+      ticketPrice: data.ticket_price,
+      ticketUrl: data.ticket_url,
+      organizer: data.organizer,
+      organizerContact: data.organizer_contact,
+      imageKeywords: data.image_keywords,
+      highlights: data.highlights,
+      schedule: data.schedule,
+      facilities: data.facilities,
+      accessibility: data.accessibility,
+      tips: data.tips,
+      nearbyAttractions: data.nearby_attractions,
+      coordinates: data.latitude && data.longitude ? { lat: data.latitude, lng: data.longitude } : null,
+    };
+  }
+  
+  if (type === 'accommodation-detail' || type === 'accommodations') {
+    return {
+      name: data.name,
+      slug: data.slug,
+      type: data.type,
+      stars: data.stars,
+      description: data.description,
+      longDescription: data.long_description,
+      address: data.address,
+      city: data.location,
+      county: data.county,
+      pricePerNight: data.price_min ? { min: data.price_min, max: data.price_max, currency: data.currency } : null,
+      priceRange: data.price_range,
+      rating: data.rating,
+      reviewCount: data.review_count,
+      checkIn: data.check_in,
+      checkOut: data.check_out,
+      amenities: data.amenities,
+      imageKeywords: data.image_keywords,
+      highlights: data.highlights,
+      roomTypes: data.room_types,
+      facilities: data.facilities,
+      policies: data.policies,
+      nearbyAttractions: data.nearby_attractions,
+      reviews: data.reviews,
+      contact: data.contact,
+      coordinates: data.latitude && data.longitude ? { lat: data.latitude, lng: data.longitude } : null,
+      bookingTips: data.booking_tips,
+    };
+  }
+  
+  if (type === 'attraction-detail' || type === 'attractions') {
+    return {
+      title: data.title,
+      slug: data.slug,
+      category: data.category,
+      description: data.description,
+      location: data.location,
+      city: data.location,
+      tips: data.tips,
+      imageKeywords: data.image_keywords,
+      isPaid: data.is_paid,
+      entryFee: data.entry_fee,
+      openingHours: data.opening_hours,
+      duration: data.duration,
+      coordinates: data.latitude && data.longitude ? { lat: data.latitude, lng: data.longitude } : null,
+    };
+  }
+  
+  return data;
+}
+
+function calculateEventExpiry(dateString: string): Date {
+  const months: Record<string, number> = {
+    'ianuarie': 0, 'februarie': 1, 'martie': 2, 'aprilie': 3,
+    'mai': 4, 'iunie': 5, 'iulie': 6, 'august': 7,
+    'septembrie': 8, 'octombrie': 9, 'noiembrie': 10, 'decembrie': 11
+  };
+  
+  try {
+    // Try to parse Romanian date format like "15 Martie 2025"
+    const parts = dateString.toLowerCase().split(' ');
+    if (parts.length >= 3) {
+      const day = parseInt(parts[0]);
+      const month = months[parts[1]];
+      const year = parseInt(parts[2]);
+      
+      if (!isNaN(day) && month !== undefined && !isNaN(year)) {
+        const eventDate = new Date(year, month, day);
+        eventDate.setDate(eventDate.getDate() + 1); // Expire day after event
+        return eventDate;
+      }
+    }
+  } catch (e) {
+    console.error('Error parsing date:', dateString, e);
+  }
+  
+  // Default to 30 days from now
+  const defaultExpiry = new Date();
+  defaultExpiry.setDate(defaultExpiry.getDate() + 30);
+  return defaultExpiry;
+}
