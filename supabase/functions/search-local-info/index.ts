@@ -1,30 +1,125 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-};
-
-interface SearchRequest {
-  query: string;
-  type: 'events' | 'accommodations' | 'attractions' | 'traffic' | 'event-detail' | 'accommodation-detail' | 'attraction-detail' | 'all';
-  location: string;
-  county?: string;
-  slug?: string;
-}
-
-const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const { query, type, location, county, slug } = await req.json() as SearchRequest;
-    
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+ 
+ const corsHeaders = {
+   'Access-Control-Allow-Origin': '*',
+   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
+ };
+ 
+ const VALID_TYPES = ['events', 'accommodations', 'attractions', 'traffic', 'event-detail', 'accommodation-detail', 'attraction-detail', 'all'] as const;
+ type SearchType = typeof VALID_TYPES[number];
+ 
+ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+ const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+ 
+ // Input validation
+ function validateInput(body: unknown): { query: string; type: SearchType; location: string; county?: string; slug?: string } | { error: string } {
+   if (!body || typeof body !== 'object') {
+     return { error: 'Request body invalid' };
+   }
+   
+   const data = body as Record<string, unknown>;
+   
+   // Validate type
+   if (typeof data.type !== 'string' || !VALID_TYPES.includes(data.type as SearchType)) {
+     return { error: `Tip invalid. Tipuri valide: ${VALID_TYPES.join(', ')}` };
+   }
+   const type = data.type as SearchType;
+   
+   // Validate location: required, 1-100 chars
+   if (typeof data.location !== 'string' || data.location.length < 1 || data.location.length > 100) {
+     return { error: 'Location trebuie să aibă 1-100 caractere' };
+   }
+   const location = data.location.trim().replace(/[\x00-\x1F\x7F]/g, '');
+   
+   // Validate query: optional, max 200 chars
+   let query = '';
+   if (data.query !== undefined) {
+     if (typeof data.query !== 'string' || data.query.length > 200) {
+       return { error: 'Query trebuie să aibă maxim 200 caractere' };
+     }
+     query = data.query.trim().replace(/[\x00-\x1F\x7F]/g, '');
+   }
+   
+   // Validate county: optional, max 50 chars
+   let county: string | undefined;
+   if (data.county !== undefined && data.county !== null && data.county !== '') {
+     if (typeof data.county !== 'string' || data.county.length > 50) {
+       return { error: 'County trebuie să aibă maxim 50 caractere' };
+     }
+     county = data.county.trim().replace(/[\x00-\x1F\x7F]/g, '');
+   }
+   
+   // Validate slug: optional, must match pattern, max 100 chars
+   let slug: string | undefined;
+   if (data.slug !== undefined && data.slug !== null && data.slug !== '') {
+     if (typeof data.slug !== 'string' || data.slug.length > 100) {
+       return { error: 'Slug trebuie să aibă maxim 100 caractere' };
+     }
+     // Only allow lowercase letters, numbers, and hyphens
+     if (!/^[a-z0-9-]+$/.test(data.slug)) {
+       return { error: 'Slug poate conține doar litere mici, cifre și cratimă' };
+     }
+     slug = data.slug;
+   }
+   
+   return { query, type, location, county, slug };
+ }
+ 
+ Deno.serve(async (req) => {
+   if (req.method === 'OPTIONS') {
+     return new Response(null, { headers: corsHeaders });
+   }
+ 
+   try {
+     // Authentication check
+     const authHeader = req.headers.get('Authorization');
+     if (!authHeader) {
+       console.log('Search request rejected: No authorization header');
+       return new Response(
+         JSON.stringify({ success: false, error: 'Autentificare necesară' }),
+         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+       );
+     }
+ 
+     const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+       global: { headers: { Authorization: authHeader } }
+     });
+ 
+     const { data: { user }, error: authError } = await authClient.auth.getUser();
+     if (authError || !user) {
+       console.log('Search request rejected: Invalid user', authError?.message);
+       return new Response(
+         JSON.stringify({ success: false, error: 'Autentificare invalidă' }),
+         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+       );
+     }
+ 
+     console.log(`Search request from user: ${user.id}`);
+ 
+     // Parse and validate input
+     let body: unknown;
+     try {
+       body = await req.json();
+     } catch {
+       return new Response(
+         JSON.stringify({ success: false, error: 'Format JSON invalid' }),
+         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+       );
+     }
+ 
+     const validated = validateInput(body);
+     if ('error' in validated) {
+       return new Response(
+         JSON.stringify({ success: false, error: validated.error }),
+         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+       );
+     }
+ 
+     const { query, type, location, county, slug } = validated;
+     
+     // Use service role for database operations (after auth validation)
+     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     // Try to get from cache first for detail pages
     if ((type === 'event-detail' || type === 'accommodation-detail' || type === 'attraction-detail') && slug) {
