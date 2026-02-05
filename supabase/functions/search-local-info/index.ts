@@ -184,19 +184,22 @@ function isValidImageUrl(url: string): boolean {
  // ===== OPENSTREETMAP OVERPASS API =====
  async function fetchOSMPOIs(lat: number, lng: number, radius: number, types: string[]): Promise<any[]> {
    try {
-     // Build Overpass query for POIs
-     const typeFilters = types.map(t => `node["tourism"="${t}"](around:${radius},${lat},${lng});`).join('\n');
+    // Build Overpass query for tourism POIs ONLY (not restaurants/hotels)
+    const typeFilters = types.map(t => `
+      node["tourism"="${t}"](around:${radius},${lat},${lng});
+      way["tourism"="${t}"](around:${radius},${lat},${lng});
+    `).join('\n');
+    
      const query = `
        [out:json][timeout:25];
        (
          ${typeFilters}
-         node["amenity"="restaurant"](around:${radius},${lat},${lng});
-         node["amenity"="hotel"](around:${radius},${lat},${lng});
-         node["tourism"="attraction"](around:${radius},${lat},${lng});
-         node["tourism"="museum"](around:${radius},${lat},${lng});
-         node["historic"](around:${radius},${lat},${lng});
+        node["historic"~"castle|church|monument|memorial|ruins|archaeological_site"](around:${radius},${lat},${lng});
+        way["historic"~"castle|church|monument|memorial|ruins|archaeological_site"](around:${radius},${lat},${lng});
+        node["natural"~"peak|waterfall|cave_entrance|spring"](around:${radius},${lat},${lng});
+        way["leisure"="park"]["name"](around:${radius},${lat},${lng});
        );
-       out body;
+      out center body;
      `;
      
      const res = await fetch('https://overpass-api.de/api/interpreter', {

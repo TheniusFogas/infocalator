@@ -36,6 +36,21 @@
  // In-memory image URL cache
  const imageCache = new Map<string, string>();
  
+// Validate image URL - exclude PDFs, logos, etc
+function isValidImageUrl(url: string): boolean {
+  if (!url) return false;
+  const lowerUrl = url.toLowerCase();
+  
+  // Exclude PDFs and bad patterns
+  const badPatterns = ['.pdf', '.doc', '.svg', 'logo', 'map', 'coat_of_arms', 'monitorul', 'blason', 'stemă', 'flag', 'icon', 'symbol'];
+  for (const pattern of badPatterns) {
+    if (lowerUrl.includes(pattern)) return false;
+  }
+  
+  // Must have valid image extension
+  return lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') || lowerUrl.includes('.png') || lowerUrl.includes('.webp');
+}
+
  export const RealImage = ({
    name,
    location,
@@ -66,32 +81,58 @@
        setError(false);
  
        try {
-         // Try Wikimedia Commons search
-         const query = location ? `${name} ${location} Romania` : `${name} Romania`;
-         const searchUrl = `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srnamespace=6&srlimit=1&format=json&origin=*`;
+          // First try Wikipedia REST API for main image (most reliable)
+          const wikiTitle = name.replace(/ /g, '_');
+          const wikiUrl = `https://ro.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiTitle)}`;
          
-         const searchRes = await fetch(searchUrl);
-         if (!searchRes.ok) throw new Error('Search failed');
+          const wikiRes = await fetch(wikiUrl);
+          if (wikiRes.ok) {
+            const wikiData = await wikiRes.json();
+            const wikiImage = wikiData.thumbnail?.source || wikiData.originalimage?.source;
+            
+            if (wikiImage && isValidImageUrl(wikiImage)) {
+              imageCache.set(cacheKey, wikiImage);
+              setImageUrl(wikiImage);
+              setLoading(false);
+              return;
+            }
+          }
          
-         const searchData = await searchRes.json();
-         const title = searchData.query?.search?.[0]?.title;
+          // Fallback: try Wikimedia Commons search with better query
+          const query = location 
+            ? `${name} ${location} Romania photograph -logo -map -coat` 
+            : `${name} Romania photograph -logo -map -coat`;
+          const searchUrl = `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srnamespace=6&srlimit=5&format=json&origin=*`;
          
-         if (title) {
-           // Get image URL
-           const infoUrl = `https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=imageinfo&iiprop=url&iiurlwidth=${width}&format=json&origin=*`;
-           const infoRes = await fetch(infoUrl);
+          const searchRes = await fetch(searchUrl);
+          if (searchRes.ok) {
+            const searchData = await searchRes.json();
+            const titles = searchData.query?.search?.map((s: any) => s.title).filter((t: string) => {
+              const lower = t.toLowerCase();
+              return !lower.includes('.pdf') && !lower.includes('logo') && !lower.includes('map') && !lower.includes('coat');
+            }) || [];
            
-           if (infoRes.ok) {
-             const infoData = await infoRes.json();
-             const pages = infoData.query?.pages || {};
-             const page = Object.values(pages)[0] as any;
-             const thumbUrl = page?.imageinfo?.[0]?.thumburl || page?.imageinfo?.[0]?.url;
-             
-             if (thumbUrl) {
-               imageCache.set(cacheKey, thumbUrl);
-               setImageUrl(thumbUrl);
-               setLoading(false);
-               return;
+            if (titles.length > 0) {
+              const infoUrl = `https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(titles.slice(0, 3).join('|'))}&prop=imageinfo&iiprop=url|mime&iiurlwidth=${width}&format=json&origin=*`;
+              const infoRes = await fetch(infoUrl);
+              
+              if (infoRes.ok) {
+                const infoData = await infoRes.json();
+                const pages = infoData.query?.pages || {};
+                
+                for (const pageId of Object.keys(pages)) {
+                  const page = pages[pageId];
+                  const imageInfo = page?.imageinfo?.[0];
+                  const thumbUrl = imageInfo?.thumburl || imageInfo?.url;
+                  const mimeType = imageInfo?.mime || '';
+                  
+                  if (thumbUrl && mimeType.startsWith('image/') && isValidImageUrl(thumbUrl)) {
+                    imageCache.set(cacheKey, thumbUrl);
+                    setImageUrl(thumbUrl);
+                    setLoading(false);
+                    return;
+                  }
+                }
              }
            }
          }
