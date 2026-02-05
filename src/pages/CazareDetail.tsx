@@ -44,10 +44,11 @@ import { TrafficInfo } from "@/components/TrafficInfo";
 import { accommodationTypeIcons, amenityIcons, getCategoryIcon, getPlaceholderImage, priceRangeColors } from "@/lib/categoryIcons";
 
 const CazareDetailPage = () => {
-  const { slug } = useParams<{ slug: string }>();
+  const { oras, slug } = useParams<{ oras?: string; slug: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const location = searchParams.get("location") || "România";
+  // Support both /:oras/cazari/:slug and /cazari/:slug?location=...
+  const location = oras || searchParams.get("location") || "România";
   const county = searchParams.get("county") || undefined;
   
   const [accommodation, setAccommodation] = useState<AccommodationDetail | null>(null);

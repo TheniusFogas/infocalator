@@ -4,6 +4,7 @@
  import { Badge } from "@/components/ui/badge";
  import { Calendar, MapPin, Loader2, Clock, ChevronRight } from "lucide-react";
 import { localInfoApi, Event } from "@/lib/api/localInfo";
+import { buildDetailUrl, generateSlug } from "@/lib/urlUtils";
  
  interface SidebarEventsListProps {
    location: string;
@@ -87,12 +88,12 @@ import { localInfoApi, Event } from "@/lib/api/localInfo";
        </CardHeader>
        <CardContent className="space-y-3">
          {events.map((event, index) => {
-           const eventSlug = event.slug || event.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+            const eventSlug = event.slug || generateSlug(event.title);
            
            return (
              <Link
                key={index}
-               to={`/evenimente/${eventSlug}?location=${encodeURIComponent(location)}${county ? `&county=${encodeURIComponent(county)}` : ''}`}
+                to={buildDetailUrl('evenimente', eventSlug, location, county)}
                className="group block"
              >
                <div className="flex items-start gap-3 p-2 -mx-2 rounded-lg hover:bg-muted/50 transition-colors">

@@ -18,6 +18,7 @@ import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
  import FuelPrices from "./pages/FuelPrices";
  import Auth from "./pages/Auth";
+import RestaurantDetail from "./pages/RestaurantDetail";
 
 const queryClient = new QueryClient();
 
@@ -37,9 +38,17 @@ const App = () => (
             <Route path="/localitati/:id" element={<LocalitateDetail />} />
             <Route path="/cazari" element={<CazariList />} />
             <Route path="/cazari/:slug" element={<CazareDetail />} />
+            <Route path="/restaurante/:slug" element={<RestaurantDetail />} />
             <Route path="/vremea" element={<Vremea />} />
              <Route path="/preturi-carburanti" element={<FuelPrices />} />
             <Route path="/evenimente/:slug" element={<EvenimentDetail />} />
+            
+            {/* Routes with city in path */}
+            <Route path="/:oras/cazari/:slug" element={<CazareDetail />} />
+            <Route path="/:oras/atractii/:slug" element={<AtractieAIDetail />} />
+            <Route path="/:oras/restaurante/:slug" element={<RestaurantDetail />} />
+            <Route path="/:oras/evenimente/:slug" element={<EvenimentDetail />} />
+            
              <Route path="/autentificare" element={<Auth />} />
             <Route path="/admin" element={<Admin />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

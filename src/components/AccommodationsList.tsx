@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Building2, Loader2, Star, ChevronRight } from "lucide-react";
 import { localInfoApi, Accommodation } from "@/lib/api/localInfo";
 import { accommodationTypeIcons, amenityIcons, getCategoryIcon, getPlaceholderImage, priceRangeColors } from "@/lib/categoryIcons";
+import { buildDetailUrl, generateSlug } from "@/lib/urlUtils";
 
 interface AccommodationsListProps {
   location: string;
@@ -84,12 +85,12 @@ export const AccommodationsList = ({ location, county }: AccommodationsListProps
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {accommodations.map((accommodation, index) => {
             const TypeIcon = getCategoryIcon(accommodation.type, accommodationTypeIcons);
-            const accommodationSlug = accommodation.slug || accommodation.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+            const accommodationSlug = accommodation.slug || generateSlug(accommodation.name);
             
             return (
               <Link
                 key={index}
-                to={`/cazari/${accommodationSlug}?location=${encodeURIComponent(location)}${county ? `&county=${encodeURIComponent(county)}` : ''}`}
+                to={buildDetailUrl('cazari', accommodationSlug, location, county)}
                 className="group block"
               >
                 <div className="flex gap-4 p-4 rounded-xl border border-border hover:border-primary/50 hover:bg-muted/50 transition-all">

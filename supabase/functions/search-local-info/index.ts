@@ -47,7 +47,7 @@ function isValidImageUrl(url: string): boolean {
 
  interface SearchRequest {
    query: string;
-   type: 'events' | 'accommodations' | 'attractions' | 'traffic' | 'event-detail' | 'accommodation-detail' | 'attraction-detail' | 'restaurants';
+  type: 'events' | 'accommodations' | 'attractions' | 'traffic' | 'event-detail' | 'accommodation-detail' | 'attraction-detail' | 'restaurants' | 'restaurant-detail';
    location: string;
    county?: string;
    slug?: string;
@@ -788,6 +788,108 @@ function isValidImageUrl(url: string): boolean {
      return { success: true, data: { restaurants: [] } };
    }
  }
+
+// ===== RESTAURANT DETAIL =====
+async function getRestaurantDetail(location: string, slug: string, county?: string) {
+  // First search for restaurants to find the one matching the slug
+  const coords = await getLocationCoords(location, county);
+  if (!coords) {
+    const title = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    return { success: true, data: { restaurant: {
+      name: title,
+      slug,
+      type: 'Restaurant',
+      description: `Restaurant în ${location}`,
+      priceRange: 'Contactați pentru preț',
+      rating: null,
+      cuisine: [],
+      location,
+      openingHours: null,
+      coordinates: null
+    }}};
+  }
+
+  const query = `
+    [out:json][timeout:25];
+    (
+      node["amenity"="restaurant"](around:10000,${coords.lat},${coords.lng});
+      node["amenity"="cafe"](around:10000,${coords.lat},${coords.lng});
+      node["amenity"="fast_food"](around:10000,${coords.lat},${coords.lng});
+    );
+    out body;
+  `;
+  
+  try {
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': USER_AGENT },
+      body: `data=${encodeURIComponent(query)}`
+    });
+    
+    if (!res.ok) {
+      const title = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      return { success: true, data: { restaurant: { name: title, slug, type: 'Restaurant', description: `Restaurant în ${location}`, priceRange: 'Contactați pentru preț', rating: null, cuisine: [], location, openingHours: null }}};
+    }
+    
+    const data = await res.json();
+    const elements = data.elements || [];
+    
+    // Find the matching restaurant by slug
+    for (const el of elements) {
+      const name = el.tags?.name;
+      if (!name) continue;
+      
+      if (generateSlug(name) === slug) {
+        const typeMap: Record<string, string> = {
+          restaurant: 'Restaurant',
+          cafe: 'Cafenea',
+          fast_food: 'Fast Food'
+        };
+        
+        const type = typeMap[el.tags?.amenity] || 'Restaurant';
+        const cuisine = el.tags?.cuisine?.split(';').map((c: string) => c.trim()) || [];
+        
+        // Get Wikipedia description if available
+        const wikiContent = await fetchWikipediaContent(name);
+        
+        return { success: true, data: { restaurant: {
+          name,
+          slug,
+          type,
+          description: wikiContent?.extract || el.tags?.description || `${type} în ${location}`,
+          priceRange: el.tags?.price || 'Contactați pentru preț',
+          rating: null,
+          cuisine,
+          location,
+          openingHours: el.tags?.opening_hours || null,
+          phone: el.tags?.phone || el.tags?.['contact:phone'] || null,
+          website: el.tags?.website || el.tags?.['contact:website'] || null,
+          coordinates: { lat: el.lat, lng: el.lon },
+          imageKeywords: `${type} ${name} ${location}`
+        }}};
+      }
+    }
+    
+    // Not found - return minimal data from slug
+    const title = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    return { success: true, data: { restaurant: {
+      name: title,
+      slug,
+      type: 'Restaurant',
+      description: `Restaurant în ${location}`,
+      priceRange: 'Contactați pentru preț',
+      rating: null,
+      cuisine: [],
+      location,
+      openingHours: null,
+      coordinates: coords
+    }}};
+  } catch (e) {
+    console.error('Restaurant detail error:', e);
+    const title = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    return { success: true, data: { restaurant: { name: title, slug, type: 'Restaurant', description: `Restaurant în ${location}`, priceRange: 'Contactați pentru preț', rating: null, cuisine: [], location, openingHours: null }}};
+  }
+}
  
  // ===== TRAFFIC from CNAIR/INFOTRAFIC (placeholder) =====
  async function searchTraffic(location: string, county?: string) {
@@ -833,6 +935,9 @@ function isValidImageUrl(url: string): boolean {
        case 'restaurants':
          result = await searchRestaurants(location, county);
          break;
+      case 'restaurant-detail':
+        result = await getRestaurantDetail(location, slug!, county);
+        break;
        case 'traffic':
          result = await searchTraffic(location, county);
          break;

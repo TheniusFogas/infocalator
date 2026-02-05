@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Landmark, MapPin, Loader2, Lightbulb, Clock, Ticket, ChevronRight } from "lucide-react";
 import { localInfoApi, AIAttraction } from "@/lib/api/localInfo";
 import { attractionCategoryIcons, getCategoryIcon, getPlaceholderImage } from "@/lib/categoryIcons";
+import { buildDetailUrl, generateSlug } from "@/lib/urlUtils";
 
 interface AIAttractionsListProps {
   location: string;
@@ -97,12 +98,12 @@ export const AIAttractionsList = ({ location, county }: AIAttractionsListProps) 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {attractions.map((attraction, index) => {
             const CategoryIcon = getCategoryIcon(attraction.category, attractionCategoryIcons);
-            const attractionSlug = attraction.slug || attraction.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+            const attractionSlug = attraction.slug || generateSlug(attraction.title);
             
             return (
               <Link
                 key={index}
-                to={`/atractii-ai/${attractionSlug}?location=${encodeURIComponent(location)}${county ? `&county=${encodeURIComponent(county)}` : ''}`}
+                to={buildDetailUrl('atractii', attractionSlug, location, county)}
                 className="group block"
               >
                 <div className="flex gap-4 p-4 rounded-xl border border-border hover:border-primary/50 hover:bg-muted/50 transition-all">

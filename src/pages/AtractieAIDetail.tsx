@@ -27,10 +27,11 @@ import { AccommodationsList } from "@/components/AccommodationsList";
 import { attractionCategoryIcons, getCategoryIcon, getPlaceholderImage } from "@/lib/categoryIcons";
 
 const AtractieAIDetailPage = () => {
-  const { slug } = useParams<{ slug: string }>();
+  const { oras, slug } = useParams<{ oras?: string; slug: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const location = searchParams.get("location") || "România";
+  // Support both /:oras/atractii/:slug and /atractii-ai/:slug?location=...
+  const location = oras || searchParams.get("location") || "România";
   const county = searchParams.get("county") || undefined;
   
    const [attraction, setAttraction] = useState<AIAttractionDetail | null>(null);
