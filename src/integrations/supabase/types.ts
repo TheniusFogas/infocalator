@@ -823,7 +823,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      is_service_request: { Args: never; Returns: boolean }
+      [_ in never]: never
     }
     Enums: {
       [_ in never]: never

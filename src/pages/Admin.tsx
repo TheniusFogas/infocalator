@@ -74,16 +74,16 @@ const AdminPage = () => {
 
       setUser(session.user);
 
-      // Check if user is admin
-      const { data: adminData } = await supabase
-        .from('admin_users')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .maybeSingle();
-
-      if (adminData) {
-        setIsAdmin(true);
-        await fetchData();
+       // Server-side admin verification
+       try {
+         const { data, error } = await supabase.functions.invoke('verify-admin');
+         
+         if (!error && data?.isAdmin) {
+           setIsAdmin(true);
+           await fetchData();
+         }
+       } catch (err) {
+         console.error('Admin verification error:', err);
       }
       
       setLoading(false);
@@ -95,15 +95,16 @@ const AdminPage = () => {
       if (event === 'SIGNED_IN' && session) {
         setUser(session.user);
         
-        const { data: adminData } = await supabase
-          .from('admin_users')
-          .select('*')
-          .eq('user_id', session.user.id)
-          .maybeSingle();
-
-        if (adminData) {
-          setIsAdmin(true);
-          await fetchData();
+         // Server-side admin verification
+         try {
+           const { data, error } = await supabase.functions.invoke('verify-admin');
+           
+           if (!error && data?.isAdmin) {
+             setIsAdmin(true);
+             await fetchData();
+           }
+         } catch (err) {
+           console.error('Admin verification error:', err);
         }
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
