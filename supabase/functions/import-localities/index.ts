@@ -37,9 +37,49 @@
  
    try {
      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-     const supabase = createClient(supabaseUrl, supabaseKey);
+     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
  
+     // Authentication check - ADMIN ONLY
+     const authHeader = req.headers.get('Authorization');
+     if (!authHeader) {
+       console.log('Import localities rejected: No authorization header');
+       return new Response(
+         JSON.stringify({ success: false, error: 'Autentificare necesară' }),
+         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+       );
+     }
+ 
+     const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+       global: { headers: { Authorization: authHeader } }
+     });
+ 
+     const { data: { user }, error: authError } = await authClient.auth.getUser();
+     if (authError || !user) {
+       console.log('Import localities rejected: Invalid user', authError?.message);
+       return new Response(
+         JSON.stringify({ success: false, error: 'Autentificare invalidă' }),
+         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+       );
+     }
+ 
+     // Check if user is admin
+     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+     const { data: adminUser } = await supabase
+       .from('admin_users')
+       .select('role')
+       .eq('user_id', user.id)
+       .single();
+ 
+     if (!adminUser) {
+       console.log(`Import localities rejected: User ${user.id} is not admin`);
+       return new Response(
+         JSON.stringify({ success: false, error: 'Acces permis doar pentru administratori' }),
+         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+       );
+     }
+ 
+     console.log(`Import localities started by admin: ${user.id}`);
      console.log('Starting localities import from GeoNames...');
  
      // Fetch Romanian cities from GeoNames

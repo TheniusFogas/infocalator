@@ -1,37 +1,102 @@
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+ 
+ const corsHeaders = {
+   'Access-Control-Allow-Origin': '*',
    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-};
-
-interface GeocodeRequest {
-  query: string;
-   country?: string; // Optional: 'ro' for Romania, empty for international
-}
-
-interface GeocodeResult {
-  name: string;
-  displayName: string;
-  latitude: number;
-  longitude: number;
-  type: string;
-  county?: string;
+ };
+ 
+ interface GeocodeResult {
+   name: string;
+   displayName: string;
+   latitude: number;
+   longitude: number;
+   type: string;
+   county?: string;
    country?: string;
-}
-
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-     const { query, country } = await req.json() as GeocodeRequest;
-    
-    if (!query || query.length < 2) {
-      return new Response(
-        JSON.stringify({ success: true, results: [] }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+ }
+ 
+ // Input validation
+ function validateInput(body: unknown): { query: string; country?: string } | null {
+   if (!body || typeof body !== 'object') return null;
+   
+   const data = body as Record<string, unknown>;
+   const query = data.query;
+   const country = data.country;
+   
+   // Validate query: required string, 2-200 chars
+   if (typeof query !== 'string' || query.length < 2 || query.length > 200) {
+     return null;
+   }
+   
+   // Sanitize query: trim, remove control characters
+   const sanitizedQuery = query.trim().replace(/[\x00-\x1F\x7F]/g, '');
+   if (sanitizedQuery.length < 2) return null;
+   
+   // Validate country: optional, must be 'ro' or empty/undefined
+   if (country !== undefined && country !== '' && country !== 'ro') {
+     return null;
+   }
+   
+   return {
+     query: sanitizedQuery,
+     country: country as string | undefined
+   };
+ }
+ 
+ Deno.serve(async (req) => {
+   if (req.method === 'OPTIONS') {
+     return new Response(null, { headers: corsHeaders });
+   }
+ 
+   try {
+     // Authentication check
+     const authHeader = req.headers.get('Authorization');
+     if (!authHeader) {
+       console.log('Geocode request rejected: No authorization header');
+       return new Response(
+         JSON.stringify({ success: false, error: 'Autentificare necesară' }),
+         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+       );
+     }
+ 
+     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+     
+     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+       global: { headers: { Authorization: authHeader } }
+     });
+ 
+     const { data: { user }, error: authError } = await supabase.auth.getUser();
+     if (authError || !user) {
+       console.log('Geocode request rejected: Invalid user', authError?.message);
+       return new Response(
+         JSON.stringify({ success: false, error: 'Autentificare invalidă' }),
+         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+       );
+     }
+ 
+     console.log(`Geocode request from user: ${user.id}`);
+ 
+     // Parse and validate input
+     let body: unknown;
+     try {
+       body = await req.json();
+     } catch {
+       return new Response(
+         JSON.stringify({ success: false, error: 'Format JSON invalid' }),
+         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+       );
+     }
+ 
+     const validated = validateInput(body);
+     if (!validated) {
+       return new Response(
+         JSON.stringify({ success: false, error: 'Parametri invalizi. Query trebuie să aibă 2-200 caractere.' }),
+         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+       );
+     }
+ 
+     const { query, country } = validated;
 
     console.log(`Geocoding: ${query}`);
 
