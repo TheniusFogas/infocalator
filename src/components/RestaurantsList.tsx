@@ -12,7 +12,7 @@
    type: string;
    description: string;
    priceRange: string;
-   rating: number;
+  rating?: number | null;
    cuisine: string[];
    location: string;
    openingHours?: string;
@@ -37,57 +37,19 @@
        setError(null);
        
        try {
-         // For now, generate placeholder restaurants based on location
-         // In future, this will call an edge function similar to accommodations
-         const placeholderRestaurants: Restaurant[] = [
-           {
-             name: `Restaurant Central ${location}`,
-             slug: `restaurant-central-${location.toLowerCase().replace(/\s+/g, '-')}`,
-             type: 'Restaurant',
-             description: `Restaurant tradițional românesc în centrul orașului ${location}, cu specific local și ingrediente proaspete.`,
-             priceRange: '50-150 RON',
-             rating: 4.5,
-             cuisine: ['Românească', 'Tradițională'],
-             location: location,
-             openingHours: '10:00 - 23:00',
-             isFeatured: false
-           },
-           {
-             name: `Pizzeria Bella Italia`,
-             slug: 'pizzeria-bella-italia',
-             type: 'Pizzerie',
-             description: 'Pizza artizanală cu blat subțire, cuptorul pe lemne și ingrediente importate din Italia.',
-             priceRange: '30-80 RON',
-             rating: 4.3,
-             cuisine: ['Italiană', 'Pizza'],
-             location: location,
-             openingHours: '11:00 - 22:00'
-           },
-           {
-             name: `Bistro ${location}`,
-             slug: `bistro-${location.toLowerCase().replace(/\s+/g, '-')}`,
-             type: 'Bistro',
-             description: 'Meniu internațional cu influențe locale, atmosferă relaxată și prețuri accesibile.',
-             priceRange: '40-100 RON',
-             rating: 4.2,
-             cuisine: ['Internațională', 'Fusion'],
-             location: location,
-             openingHours: '08:00 - 22:00'
-           },
-           {
-             name: `Terasa Panoramic`,
-             slug: 'terasa-panoramic',
-             type: 'Terasă',
-             description: `Terasă cu vedere panoramică asupra orașului ${location}, ideală pentru cină romantică.`,
-             priceRange: '80-200 RON',
-             rating: 4.7,
-             cuisine: ['Românească', 'Europeană'],
-             location: location,
-             openingHours: '12:00 - 00:00'
-           }
-         ];
-         
-         setRestaurants(placeholderRestaurants);
+        // Fetch from edge function (OSM data)
+        const { data, error: fetchError } = await supabase.functions.invoke('search-local-info', {
+          body: { query: location, type: 'restaurants', location, county }
+        });
+        
+        if (fetchError) {
+          console.error('Error fetching restaurants:', fetchError);
+          setRestaurants([]);
+        } else if (data?.success && data.data?.restaurants) {
+          setRestaurants(data.data.restaurants);
+        } else {
+          setRestaurants([]);
+        }
        } catch (err) {
          setError("Nu s-au putut încărca restaurantele");
        }
@@ -171,8 +133,12 @@
                        {restaurant.type}
                      </Badge>
                      <div className="flex items-center gap-1 text-amber-500">
-                      <Star className="w-3 h-3 fill-amber-500" />
-                       <span className="text-xs font-medium">{restaurant.rating}</span>
+                      {restaurant.rating && (
+                        <>
+                          <Star className="w-3 h-3 fill-current" />
+                          <span className="text-xs font-medium">{restaurant.rating}</span>
+                        </>
+                      )}
                      </div>
                    </div>
                    

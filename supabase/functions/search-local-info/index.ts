@@ -1,3 +1,6 @@
+ // AUTONOMOUS DATA SYSTEM - No AI dependency
+ // Uses Wikipedia, Wikidata, OpenStreetMap for REAL data
+ 
  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
  
  const corsHeaders = {
@@ -5,90 +8,21 @@
    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
  };
  
- const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
  const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
  const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
- 
  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
  
-// Cache durations
-const CACHE_HOURS_EVENTS = 24 * 7; // 7 days for regenerated events
-const CACHE_MONTHS_CONTENT = 6; // 6 months for attractions/accommodations/localities
-const CACHE_HOURS_CONTENT = CACHE_MONTHS_CONTENT * 30 * 24; // ~6 months in hours
- 
- // Fetch real image from Wikimedia Commons
- async function fetchWikimediaImage(searchQuery: string): Promise<string | null> {
-   try {
-     // Search Wikimedia Commons
-     const searchUrl = `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(searchQuery + ' Romania')}&srnamespace=6&srlimit=1&format=json&origin=*`;
-     
-     const searchRes = await fetch(searchUrl, {
-       headers: { 'User-Agent': 'RomaniaTravel/1.0 (contact@disdis.ro)' }
-     });
-     
-     if (!searchRes.ok) return null;
-     const searchData = await searchRes.json();
-     
-     const title = searchData.query?.search?.[0]?.title;
-     if (!title) return null;
-     
-     // Get image URL
-     const infoUrl = `https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=imageinfo&iiprop=url&iiurlwidth=640&format=json&origin=*`;
-     
-     const infoRes = await fetch(infoUrl, {
-       headers: { 'User-Agent': 'RomaniaTravel/1.0 (contact@disdis.ro)' }
-     });
-     
-     if (!infoRes.ok) return null;
-     const infoData = await infoRes.json();
-     
-     const pages = infoData.query?.pages || {};
-     for (const pageId of Object.keys(pages)) {
-       const thumbUrl = pages[pageId]?.imageinfo?.[0]?.thumburl;
-       if (thumbUrl) return thumbUrl;
-     }
-     
-     return null;
-   } catch (error) {
-     console.error('Wikimedia fetch error:', error);
-     return null;
-   }
- }
+ const USER_AGENT = 'RomaniaTravel/1.0 (contact@disdis.ro)';
+ const CACHE_HOURS = 6 * 30 * 24; // 6 months in hours
  
  interface SearchRequest {
    query: string;
-   type: 'events' | 'accommodations' | 'attractions' | 'traffic' | 'event-detail' | 'accommodation-detail' | 'attraction-detail';
+   type: 'events' | 'accommodations' | 'attractions' | 'traffic' | 'event-detail' | 'accommodation-detail' | 'attraction-detail' | 'restaurants';
    location: string;
    county?: string;
    slug?: string;
- }
- 
- async function callLovableAI(prompt: string, systemPrompt: string): Promise<string> {
-   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-     method: 'POST',
-     headers: {
-       'Content-Type': 'application/json',
-       'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-     },
-     body: JSON.stringify({
-       model: 'google/gemini-3-flash-preview',
-       messages: [
-         { role: 'system', content: systemPrompt },
-         { role: 'user', content: prompt }
-       ],
-       temperature: 0.7,
-       max_tokens: 4000,
-     }),
-   });
- 
-   if (!response.ok) {
-     const errorText = await response.text();
-     console.error('AI API error:', response.status, errorText);
-     throw new Error(`AI API error: ${response.status} - ${errorText}`);
-   }
- 
-   const data = await response.json();
-   return data.choices[0]?.message?.content || '';
+   latitude?: number;
+   longitude?: number;
  }
  
  function generateSlug(text: string): string {
@@ -101,159 +35,168 @@ const CACHE_HOURS_CONTENT = CACHE_MONTHS_CONTENT * 30 * 24; // ~6 months in hour
      .substring(0, 60);
  }
  
- async function searchEvents(location: string, county?: string) {
-  // Check cache first - only return non-expired events
-   const { data: cached } = await supabase
-     .from('cached_events')
-     .select('*')
-     .ilike('location', `%${location}%`)
-     .gt('expires_at', new Date().toISOString())
-    .or(`date.gt.${new Date().toISOString().split('T')[0]},date.is.null`) // Only future events
-     .limit(10);
- 
-   if (cached && cached.length > 0) {
-     return { success: true, data: { events: cached.map(e => ({
-       title: e.title,
-       slug: e.slug,
-       date: e.date,
-       endDate: e.end_date,
-       time: e.time,
-       location: e.venue || location,
-       city: e.location,
-       description: e.description,
-       category: e.category,
-       isPaid: e.is_paid,
-       ticketPrice: e.ticket_price,
-       ticketUrl: e.ticket_url,
-       organizer: e.organizer,
-       imageKeywords: e.image_keywords,
-       highlights: e.highlights
-     })) }};
-   }
- 
-   // Generate with AI
-   const systemPrompt = `Ești un expert în evenimente și festivaluri din România. Generează DOAR format JSON valid, fără markdown.
- Returnează un array de 5-8 evenimente reale sau plauzibile pentru zona specificată.
- Include festivaluri, târguri, concerte, evenimente sportive, expoziții, sărbători locale.
- Datele trebuie să fie în viitorul apropiat (următoarele 3-6 luni).`;
- 
-   const prompt = `Generează evenimente pentru ${location}${county ? `, județul ${county}` : ''}.
- Returnează JSON array cu structura:
- [{"title": "Nume Eveniment", "date": "2026-03-15", "endDate": "2026-03-17", "time": "10:00", "venue": "Loc desfășurare", "description": "Descriere scurtă max 150 caractere", "category": "Festival/Concert/Târg/Sport/Expoziție", "isPaid": true/false, "ticketPrice": "50 RON", "organizer": "Organizator", "imageKeywords": "festival muzica outdoor", "highlights": ["atractie1", "atractie2"]}]`;
- 
+ // ===== WIKIPEDIA API =====
+ async function fetchWikipediaContent(title: string, lang: string = 'ro'): Promise<{ extract: string; image?: string } | null> {
    try {
-     const aiResponse = await callLovableAI(prompt, systemPrompt);
-     const jsonMatch = aiResponse.match(/\[[\s\S]*\]/);
-     if (!jsonMatch) throw new Error('Invalid AI response');
+     const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+     const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+     if (!res.ok) return null;
      
-     const events = JSON.parse(jsonMatch[0]);
-      // Events expire based on their end date or 7 days after the event
-      const defaultExpiry = new Date(Date.now() + CACHE_HOURS_EVENTS * 60 * 60 * 1000).toISOString();
- 
-     // Cache results
-     for (const event of events) {
-       const slug = generateSlug(event.title);
-       await supabase.from('cached_events').upsert({
-         slug,
-         location,
-         county: county || null,
-         title: event.title,
-         description: event.description,
-         long_description: event.description,
-         category: event.category,
-         date: event.date,
-         end_date: event.endDate,
-         time: event.time,
-         venue: event.venue,
-         is_paid: event.isPaid,
-         ticket_price: event.ticketPrice,
-         organizer: event.organizer,
-         image_keywords: event.imageKeywords,
-         highlights: event.highlights,
-          expires_at: event.endDate 
-            ? new Date(new Date(event.endDate).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days after event ends
-            : event.date 
-              ? new Date(new Date(event.date).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days after event date
-              : defaultExpiry
-       }, { onConflict: 'slug,location' });
-     }
- 
-     return { success: true, data: { events: events.map((e: any) => ({ ...e, slug: generateSlug(e.title), city: location })) }};
-   } catch (error) {
-     console.error('Error generating events:', error);
-     return { success: false, error: 'Failed to generate events' };
+     const data = await res.json();
+     return {
+       extract: data.extract || '',
+       image: data.thumbnail?.source || data.originalimage?.source
+     };
+   } catch (e) {
+     console.error('Wikipedia fetch error:', e);
+     return null;
    }
  }
  
- async function searchAccommodations(location: string, county?: string) {
-   // Check cache
-   const { data: cached } = await supabase
-     .from('cached_accommodations')
-     .select('*')
-     .ilike('location', `%${location}%`)
-     .gt('expires_at', new Date().toISOString())
-     .limit(10);
- 
-   if (cached && cached.length > 0) {
-     return { success: true, data: { accommodations: cached.map(a => ({
-       name: a.name,
-       slug: a.slug,
-       type: a.type,
-       description: a.description,
-       priceRange: a.price_range,
-       rating: a.rating,
-       reviewCount: a.review_count,
-       amenities: a.amenities || [],
-       city: a.location,
-       imageKeywords: a.image_keywords,
-       highlights: a.highlights
-     })) }};
-   }
- 
-   const systemPrompt = `Ești un expert în turism și cazări din România. Generează DOAR format JSON valid.
- Include hoteluri, pensiuni, vile, apartamente, cabane din zona specificată.
- Prețurile trebuie să fie în RON și realiste pentru România.`;
- 
-   const prompt = `Generează 6-10 opțiuni de cazare pentru ${location}${county ? `, județul ${county}` : ''}.
- JSON array cu: [{"name": "Nume Cazare", "type": "Hotel/Pensiune/Vila/Apartament/Cabană", "description": "Descriere scurtă", "priceRange": "200-400 RON/noapte", "stars": 3, "rating": 8.5, "reviewCount": 150, "amenities": ["WiFi", "Parcare", "Mic dejun"], "imageKeywords": "hotel modern mountain view", "highlights": ["avantaj1", "avantaj2"]}]`;
- 
+ async function searchWikipedia(query: string, lang: string = 'ro'): Promise<Array<{ title: string; description: string }>> {
    try {
-     const aiResponse = await callLovableAI(prompt, systemPrompt);
-     const jsonMatch = aiResponse.match(/\[[\s\S]*\]/);
-     if (!jsonMatch) throw new Error('Invalid AI response');
+     const url = `https://${lang}.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=10&format=json&origin=*`;
+     const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+     if (!res.ok) return [];
      
-     const accommodations = JSON.parse(jsonMatch[0]);
-      const expiresAt = new Date(Date.now() + CACHE_HOURS_CONTENT * 60 * 60 * 1000).toISOString(); // 6 months
- 
-     for (const acc of accommodations) {
-       const slug = generateSlug(acc.name);
-       await supabase.from('cached_accommodations').upsert({
-         slug,
-         location,
-         county: county || null,
-         name: acc.name,
-         type: acc.type,
-         description: acc.description,
-         price_range: acc.priceRange,
-         stars: acc.stars,
-         rating: acc.rating,
-         review_count: acc.reviewCount,
-         amenities: acc.amenities,
-         image_keywords: acc.imageKeywords,
-         highlights: acc.highlights,
-         expires_at: expiresAt
-       }, { onConflict: 'slug,location' });
-     }
- 
-     return { success: true, data: { accommodations: accommodations.map((a: any) => ({ ...a, slug: generateSlug(a.name), city: location })) }};
-   } catch (error) {
-     console.error('Error generating accommodations:', error);
-     return { success: false, error: 'Failed to generate accommodations' };
+     const data = await res.json();
+     const titles = data[1] || [];
+     const descriptions = data[2] || [];
+     
+     return titles.map((title: string, i: number) => ({
+       title,
+       description: descriptions[i] || ''
+     }));
+   } catch (e) {
+     console.error('Wikipedia search error:', e);
+     return [];
    }
  }
  
+ // ===== WIKIMEDIA COMMONS =====
+ async function fetchWikimediaImages(query: string, limit: number = 5): Promise<Array<{ url: string; title: string }>> {
+   try {
+     const searchUrl = `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query + ' Romania')}&srnamespace=6&srlimit=${limit}&format=json&origin=*`;
+     const searchRes = await fetch(searchUrl, { headers: { 'User-Agent': USER_AGENT } });
+     if (!searchRes.ok) return [];
+     
+     const searchData = await searchRes.json();
+     const titles = searchData.query?.search?.map((s: any) => s.title) || [];
+     if (titles.length === 0) return [];
+     
+     const infoUrl = `https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(titles.join('|'))}&prop=imageinfo&iiprop=url&iiurlwidth=640&format=json&origin=*`;
+     const infoRes = await fetch(infoUrl, { headers: { 'User-Agent': USER_AGENT } });
+     if (!infoRes.ok) return [];
+     
+     const infoData = await infoRes.json();
+     const pages = infoData.query?.pages || {};
+     
+     const images: Array<{ url: string; title: string }> = [];
+     for (const pageId of Object.keys(pages)) {
+       const page = pages[pageId];
+       const thumbUrl = page?.imageinfo?.[0]?.thumburl;
+       if (thumbUrl) {
+         images.push({ url: thumbUrl, title: page.title?.replace('File:', '') || '' });
+       }
+     }
+     return images;
+   } catch (e) {
+     console.error('Wikimedia fetch error:', e);
+     return [];
+   }
+ }
+ 
+ // ===== WIKIDATA API =====
+ async function fetchWikidataEntity(query: string): Promise<any | null> {
+   try {
+     const searchUrl = `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(query)}&language=ro&format=json&origin=*`;
+     const searchRes = await fetch(searchUrl, { headers: { 'User-Agent': USER_AGENT } });
+     if (!searchRes.ok) return null;
+     
+     const searchData = await searchRes.json();
+     const entityId = searchData.search?.[0]?.id;
+     if (!entityId) return null;
+     
+     const entityUrl = `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${entityId}&props=claims|labels|descriptions&languages=ro|en&format=json&origin=*`;
+     const entityRes = await fetch(entityUrl, { headers: { 'User-Agent': USER_AGENT } });
+     if (!entityRes.ok) return null;
+     
+     const entityData = await entityRes.json();
+     return entityData.entities?.[entityId] || null;
+   } catch (e) {
+     console.error('Wikidata fetch error:', e);
+     return null;
+   }
+ }
+ 
+ // ===== OPENSTREETMAP OVERPASS API =====
+ async function fetchOSMPOIs(lat: number, lng: number, radius: number, types: string[]): Promise<any[]> {
+   try {
+     // Build Overpass query for POIs
+     const typeFilters = types.map(t => `node["tourism"="${t}"](around:${radius},${lat},${lng});`).join('\n');
+     const query = `
+       [out:json][timeout:25];
+       (
+         ${typeFilters}
+         node["amenity"="restaurant"](around:${radius},${lat},${lng});
+         node["amenity"="hotel"](around:${radius},${lat},${lng});
+         node["tourism"="attraction"](around:${radius},${lat},${lng});
+         node["tourism"="museum"](around:${radius},${lat},${lng});
+         node["historic"](around:${radius},${lat},${lng});
+       );
+       out body;
+     `;
+     
+     const res = await fetch('https://overpass-api.de/api/interpreter', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': USER_AGENT },
+       body: `data=${encodeURIComponent(query)}`
+     });
+     
+     if (!res.ok) return [];
+     const data = await res.json();
+     return data.elements || [];
+   } catch (e) {
+     console.error('OSM Overpass error:', e);
+     return [];
+   }
+ }
+ 
+ // Get coordinates for a location
+ async function getLocationCoords(location: string, county?: string): Promise<{ lat: number; lng: number } | null> {
+   try {
+     // First check our localities table
+     const { data: locality } = await supabase
+       .from('localities')
+       .select('latitude, longitude')
+       .ilike('name', `%${location}%`)
+       .limit(1)
+       .maybeSingle();
+     
+     if (locality?.latitude && locality?.longitude) {
+       return { lat: locality.latitude, lng: locality.longitude };
+     }
+     
+     // Fallback to Nominatim
+     const query = county ? `${location}, ${county}, Romania` : `${location}, Romania`;
+     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`;
+     const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+     if (!res.ok) return null;
+     
+     const data = await res.json();
+     if (data.length > 0) {
+       return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+     }
+     return null;
+   } catch (e) {
+     console.error('Geocoding error:', e);
+     return null;
+   }
+ }
+ 
+ // ===== ATTRACTIONS from OSM + Wikipedia =====
  async function searchAttractions(location: string, county?: string) {
-   // Check cache
+   // Check cache first
    const { data: cached } = await supabase
      .from('cached_attractions')
      .select('*')
@@ -278,57 +221,123 @@ const CACHE_HOURS_CONTENT = CACHE_MONTHS_CONTENT * 30 * 24; // ~6 months in hour
      })) }};
    }
  
-   const systemPrompt = `Ești un ghid turistic expert pentru România. Generează DOAR format JSON valid.
- Include obiective turistice reale sau plauzibile: monumente, muzee, parcuri, clădiri istorice, biserici, cetăți, rezervații naturale.
- Fiecare atracție trebuie să aibă informații complete și precise.`;
- 
-   const prompt = `Generează 8-12 atracții turistice pentru ${location}${county ? `, județul ${county}` : ''}.
- Include categorii diverse: Muzeu, Monument, Parc, Biserică, Cetate, Natură, Arhitectură, Artă.
- JSON array: [{"title": "Nume Atracție", "category": "Categorie", "description": "Descriere 100-150 caractere", "tips": "Sfat vizitare", "imageKeywords": "castle medieval romania", "isPaid": true/false, "entryFee": "20 RON", "openingHours": "09:00-17:00", "duration": "1-2 ore"}]`;
- 
-   try {
-     const aiResponse = await callLovableAI(prompt, systemPrompt);
-     const jsonMatch = aiResponse.match(/\[[\s\S]*\]/);
-     if (!jsonMatch) throw new Error('Invalid AI response');
-     
-     const attractions = JSON.parse(jsonMatch[0]);
-      const expiresAt = new Date(Date.now() + CACHE_HOURS_CONTENT * 60 * 60 * 1000).toISOString(); // 6 months
- 
-     for (const attr of attractions) {
-       const slug = generateSlug(attr.title);
-      
-      // Try to fetch real image from Wikimedia
-      const realImageUrl = await fetchWikimediaImage(attr.title + ' ' + location);
-      
-       await supabase.from('cached_attractions').upsert({
-         slug,
-         location,
-         county: county || null,
-         title: attr.title,
-         category: attr.category,
-         description: attr.description,
-         tips: attr.tips,
-        image_keywords: realImageUrl || attr.imageKeywords, // Use real image URL if found
-         is_paid: attr.isPaid,
-         entry_fee: attr.entryFee,
-         opening_hours: attr.openingHours,
-         duration: attr.duration,
-         expires_at: expiresAt,
-         view_count: 0
-       }, { onConflict: 'slug,location' });
+   // Get coordinates
+   const coords = await getLocationCoords(location, county);
+   if (!coords) {
+     // Fallback to Wikipedia search
+     const wikiResults = await searchWikipedia(`${location} atracții turistice`);
+     if (wikiResults.length === 0) {
+       return { success: true, data: { attractions: [] } };
      }
- 
-    return { success: true, data: { attractions: attractions.map((a: any) => ({ 
-      ...a, 
-      slug: generateSlug(a.title), 
-      location 
-    })) }};
-   } catch (error) {
-     console.error('Error generating attractions:', error);
-     return { success: false, error: 'Failed to generate attractions' };
+     
+     const attractions = wikiResults.slice(0, 8).map(r => ({
+       title: r.title,
+       slug: generateSlug(r.title),
+       category: 'Atracție',
+       description: r.description || 'Obiectiv turistic din România',
+       location: location,
+       tips: null,
+       imageKeywords: r.title,
+       isPaid: false,
+       entryFee: null,
+       openingHours: null,
+       duration: null
+     }));
+     
+     return { success: true, data: { attractions } };
    }
+ 
+   // Fetch from OSM
+   const osmPOIs = await fetchOSMPOIs(coords.lat, coords.lng, 15000, ['attraction', 'museum', 'viewpoint']);
+   
+   const attractions = [];
+   const expiresAt = new Date(Date.now() + CACHE_HOURS * 60 * 60 * 1000).toISOString();
+   
+   for (const poi of osmPOIs.slice(0, 12)) {
+     const name = poi.tags?.name;
+     if (!name) continue;
+     
+     // Get category from OSM tags
+     let category = 'Atracție';
+     if (poi.tags?.tourism === 'museum') category = 'Muzeu';
+     else if (poi.tags?.tourism === 'viewpoint') category = 'Panoramă';
+     else if (poi.tags?.historic === 'castle') category = 'Castel';
+     else if (poi.tags?.historic === 'church') category = 'Biserică';
+     else if (poi.tags?.historic === 'monument') category = 'Monument';
+     else if (poi.tags?.historic === 'ruins') category = 'Ruine';
+     else if (poi.tags?.natural) category = 'Natură';
+     
+     const slug = generateSlug(name);
+     
+     // Try to get description from Wikipedia
+     const wikiContent = await fetchWikipediaContent(name);
+     const images = await fetchWikimediaImages(name);
+     
+     const attraction = {
+       title: name,
+       slug,
+       category,
+       description: wikiContent?.extract?.substring(0, 300) || poi.tags?.description || `Obiectiv turistic în ${location}`,
+       location: location,
+       tips: poi.tags?.note || null,
+       imageKeywords: images[0]?.url || name,
+       isPaid: poi.tags?.fee === 'yes',
+       entryFee: poi.tags?.charge || null,
+       openingHours: poi.tags?.opening_hours || null,
+       duration: null,
+       latitude: poi.lat,
+       longitude: poi.lon
+     };
+     
+     attractions.push(attraction);
+     
+     // Cache in database
+     await supabase.from('cached_attractions').upsert({
+       slug,
+       location,
+       county: county || null,
+       title: name,
+       category,
+       description: attraction.description,
+       tips: attraction.tips,
+       image_keywords: attraction.imageKeywords,
+       is_paid: attraction.isPaid,
+       entry_fee: attraction.entryFee,
+       opening_hours: attraction.openingHours,
+       latitude: poi.lat,
+       longitude: poi.lon,
+       expires_at: expiresAt,
+       view_count: 0
+     }, { onConflict: 'slug,location' });
+   }
+ 
+   // If OSM returned nothing, try Wikipedia
+   if (attractions.length === 0) {
+     const wikiResults = await searchWikipedia(`${location} obiective turistice`);
+     for (const result of wikiResults.slice(0, 8)) {
+       const wikiContent = await fetchWikipediaContent(result.title);
+       const images = await fetchWikimediaImages(result.title);
+       
+       attractions.push({
+         title: result.title,
+         slug: generateSlug(result.title),
+         category: 'Atracție',
+         description: wikiContent?.extract?.substring(0, 300) || result.description,
+         location: location,
+         tips: null,
+         imageKeywords: images[0]?.url || result.title,
+         isPaid: false,
+         entryFee: null,
+         openingHours: null,
+         duration: null
+       });
+     }
+   }
+ 
+   return { success: true, data: { attractions } };
  }
  
+ // ===== ATTRACTION DETAIL from Wikipedia =====
  async function getAttractionDetail(location: string, slug: string, county?: string) {
    // Check cache
    const { data: cached } = await supabase
@@ -339,6 +348,11 @@ const CACHE_HOURS_CONTENT = CACHE_MONTHS_CONTENT * 30 * 24; // ~6 months in hour
      .maybeSingle();
  
    if (cached && cached.long_description) {
+     // Increment views
+     await supabase.from('cached_attractions')
+       .update({ view_count: (cached.view_count || 0) + 1 })
+       .eq('id', cached.id);
+     
      return { success: true, data: { attraction: {
        title: cached.title,
        slug: cached.slug,
@@ -363,60 +377,197 @@ const CACHE_HOURS_CONTENT = CACHE_MONTHS_CONTENT * 30 * 24; // ~6 months in hour
      }}};
    }
  
-   const title = cached?.title || slug.replace(/-/g, ' ');
+   // Reconstruct title from slug
+   const title = cached?.title || slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
    
-   const systemPrompt = `Ești un ghid turistic și istoric expert. Generează DOAR format JSON valid.
- Creează conținut detaliat, captivant, formatat pentru cititori. Include istorie, fapte interesante, sfaturi practice.
- Textul lung trebuie să aibă paragrafe, să fie engaging și informativ.`;
+   // Fetch from Wikipedia
+   const wikiContent = await fetchWikipediaContent(title);
+   const wikiEntity = await fetchWikidataEntity(title);
+   const images = await fetchWikimediaImages(title, 6);
+   
+   const expiresAt = new Date(Date.now() + CACHE_HOURS * 60 * 60 * 1000).toISOString();
+   
+   // Build facts from Wikidata if available
+   const facts: string[] = [];
+   if (wikiEntity?.claims) {
+     // P31 = instance of
+     // P131 = located in
+     // P571 = inception date
+     // etc.
+   }
+   
+   // Get nearby attractions from OSM
+   let nearbyAttractions: Array<{ name: string; distance: string }> = [];
+   if (cached?.latitude && cached?.longitude) {
+     const nearby = await fetchOSMPOIs(cached.latitude, cached.longitude, 5000, ['attraction', 'museum']);
+     nearbyAttractions = nearby
+       .filter(p => p.tags?.name && p.tags.name !== title)
+       .slice(0, 5)
+       .map(p => ({
+         name: p.tags.name,
+         distance: '< 5 km'
+       }));
+   }
+   
+   const longDescription = wikiContent?.extract || 'Informații detaliate vor fi disponibile în curând.';
+   
+   // Update cache with details
+   if (cached) {
+     await supabase.from('cached_attractions').update({
+       long_description: longDescription,
+       nearby_attractions: nearbyAttractions,
+       image_keywords: images[0]?.url || cached.image_keywords,
+       expires_at: expiresAt,
+       view_count: (cached.view_count || 0) + 1
+     }).eq('id', cached.id);
+   }
  
-   const prompt = `Generează detalii complete pentru atracția "${title}" din ${location}${county ? `, județul ${county}` : ''}.
- JSON object: {
-   "longDescription": "Descriere detaliată 400-600 cuvinte cu paragrafe, istorie, importanță culturală",
-   "history": "Istoric 200-300 cuvinte",
-   "facts": ["Fapt interesant 1", "Fapt interesant 2", "Fapt 3", "Fapt 4", "Fapt 5"],
-   "bestTimeToVisit": "Cel mai bun moment pentru vizită",
-   "facilities": ["Facilititate 1", "Facilititate 2"],
-   "accessibility": "Informații accesibilitate",
-   "nearbyAttractions": [{"name": "Atracție apropiată", "distance": "2 km"}]
- }`;
+   return { success: true, data: { attraction: {
+     title,
+     slug,
+     category: cached?.category || 'Atracție',
+     description: cached?.description || longDescription.substring(0, 200),
+     longDescription,
+     location,
+     history: null,
+     facts,
+     tips: cached?.tips,
+     imageKeywords: images[0]?.url || title,
+     isPaid: cached?.is_paid || false,
+     entryFee: cached?.entry_fee,
+     openingHours: cached?.opening_hours,
+     nearbyAttractions,
+     coordinates: cached?.latitude && cached?.longitude ? { lat: cached.latitude, lng: cached.longitude } : null,
+     viewCount: (cached?.view_count || 0) + 1
+   }}};
+ }
  
+ // ===== ACCOMMODATIONS from OSM =====
+ async function searchAccommodations(location: string, county?: string) {
+   const { data: cached } = await supabase
+     .from('cached_accommodations')
+     .select('*')
+     .ilike('location', `%${location}%`)
+     .gt('expires_at', new Date().toISOString())
+     .limit(10);
+ 
+   if (cached && cached.length > 0) {
+     return { success: true, data: { accommodations: cached.map(a => ({
+       name: a.name,
+       slug: a.slug,
+       type: a.type,
+       description: a.description,
+       priceRange: a.price_range,
+       rating: a.rating,
+       reviewCount: a.review_count,
+       amenities: a.amenities || [],
+       city: a.location,
+       imageKeywords: a.image_keywords,
+       highlights: a.highlights
+     })) }};
+   }
+ 
+   const coords = await getLocationCoords(location, county);
+   if (!coords) {
+     return { success: true, data: { accommodations: [] } };
+   }
+ 
+   // Fetch hotels/guesthouses from OSM
+   const query = `
+     [out:json][timeout:25];
+     (
+       node["tourism"="hotel"](around:10000,${coords.lat},${coords.lng});
+       node["tourism"="guest_house"](around:10000,${coords.lat},${coords.lng});
+       node["tourism"="motel"](around:10000,${coords.lat},${coords.lng});
+       node["tourism"="hostel"](around:10000,${coords.lat},${coords.lng});
+       node["tourism"="chalet"](around:10000,${coords.lat},${coords.lng});
+       node["tourism"="apartment"](around:10000,${coords.lat},${coords.lng});
+     );
+     out body;
+   `;
+   
    try {
-     const aiResponse = await callLovableAI(prompt, systemPrompt);
-     const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-     if (!jsonMatch) throw new Error('Invalid AI response');
+     const res = await fetch('https://overpass-api.de/api/interpreter', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': USER_AGENT },
+       body: `data=${encodeURIComponent(query)}`
+     });
      
-     const details = JSON.parse(jsonMatch[0]);
-      const expiresAt = new Date(Date.now() + CACHE_HOURS_CONTENT * 60 * 60 * 1000).toISOString(); // 6 months
- 
-     // Update cache with details
-     if (cached) {
-       await supabase.from('cached_attractions').update({
-         long_description: details.longDescription,
-         history: details.history,
-         facts: details.facts,
-         best_time_to_visit: details.bestTimeToVisit,
-         facilities: details.facilities,
-         accessibility: details.accessibility,
-         nearby_attractions: details.nearbyAttractions,
+     if (!res.ok) return { success: true, data: { accommodations: [] } };
+     const data = await res.json();
+     const elements = data.elements || [];
+     
+     const accommodations = [];
+     const expiresAt = new Date(Date.now() + CACHE_HOURS * 60 * 60 * 1000).toISOString();
+     
+     for (const el of elements.slice(0, 10)) {
+       const name = el.tags?.name;
+       if (!name) continue;
+       
+       const typeMap: Record<string, string> = {
+         hotel: 'Hotel',
+         guest_house: 'Pensiune',
+         motel: 'Motel',
+         hostel: 'Hostel',
+         chalet: 'Cabană',
+         apartment: 'Apartament'
+       };
+       
+       const type = typeMap[el.tags?.tourism] || 'Cazare';
+       const slug = generateSlug(name);
+       const stars = parseInt(el.tags?.stars) || null;
+       
+       const amenities: string[] = [];
+       if (el.tags?.internet_access) amenities.push('WiFi');
+       if (el.tags?.parking) amenities.push('Parcare');
+       if (el.tags?.restaurant) amenities.push('Restaurant');
+       if (el.tags?.pool) amenities.push('Piscină');
+       
+       const images = await fetchWikimediaImages(`${type} ${location}`);
+       
+       const accommodation = {
+         name,
+         slug,
+         type,
+         description: el.tags?.description || `${type} în ${location}`,
+         priceRange: el.tags?.price || 'Contactați pentru preț',
+         rating: null,
+         reviewCount: null,
+         amenities,
+         city: location,
+         imageKeywords: images[0]?.url || `${type} ${location}`,
+         highlights: [],
+         stars
+       };
+       
+       accommodations.push(accommodation);
+       
+       // Cache
+       await supabase.from('cached_accommodations').upsert({
+         slug,
+         location,
+         county: county || null,
+         name,
+         type,
+         description: accommodation.description,
+         price_range: accommodation.priceRange,
+         stars,
+         amenities,
+         image_keywords: accommodation.imageKeywords,
+         latitude: el.lat,
+         longitude: el.lon,
          expires_at: expiresAt
-       }).eq('id', cached.id);
+       }, { onConflict: 'slug,location' });
      }
- 
-     return { success: true, data: { attraction: {
-       title: cached?.title || title,
-       slug,
-       category: cached?.category || 'Atracție',
-       description: cached?.description || details.longDescription?.substring(0, 200),
-       location,
-       ...details,
-       viewCount: cached?.view_count || 0
-     }}};
-   } catch (error) {
-     console.error('Error generating attraction detail:', error);
-     return { success: false, error: 'Failed to generate attraction details' };
+     
+     return { success: true, data: { accommodations } };
+   } catch (e) {
+     console.error('Accommodation search error:', e);
+     return { success: true, data: { accommodations: [] } };
    }
  }
  
+ // ===== ACCOMMODATION DETAIL =====
  async function getAccommodationDetail(location: string, slug: string, county?: string) {
    const { data: cached } = await supabase
      .from('cached_accommodations')
@@ -425,227 +576,159 @@ const CACHE_HOURS_CONTENT = CACHE_MONTHS_CONTENT * 30 * 24; // ~6 months in hour
      .ilike('location', `%${location}%`)
      .maybeSingle();
  
-   if (cached && cached.long_description) {
+   if (cached) {
+     const images = await fetchWikimediaImages(`${cached.type} ${location}`, 6);
+     
      return { success: true, data: { accommodation: {
        name: cached.name,
        slug: cached.slug,
        type: cached.type,
        description: cached.description,
-       longDescription: cached.long_description,
+       longDescription: cached.long_description || cached.description,
        stars: cached.stars,
        rating: cached.rating,
        reviewCount: cached.review_count,
        priceRange: cached.price_range,
-       pricePerNight: cached.price_min && cached.price_max ? { min: cached.price_min, max: cached.price_max, currency: cached.currency || 'RON' } : null,
-       amenities: cached.amenities,
-       highlights: cached.highlights,
-       address: cached.address,
+       amenities: cached.amenities || [],
+       highlights: cached.highlights || [],
        city: cached.location,
        county: cached.county,
-       checkIn: cached.check_in,
-       checkOut: cached.check_out,
-       facilities: cached.facilities,
-       roomTypes: cached.room_types,
-       policies: cached.policies,
-       nearbyAttractions: cached.nearby_attractions,
-       reviews: cached.reviews,
-       contact: cached.contact,
-       bookingTips: cached.booking_tips,
+       address: cached.address,
+       checkIn: cached.check_in || '14:00',
+       checkOut: cached.check_out || '11:00',
        coordinates: cached.latitude && cached.longitude ? { lat: cached.latitude, lng: cached.longitude } : null,
-       imageKeywords: cached.image_keywords
+       images: images.map((img, i) => ({ url: img.url, alt: `${cached.name} - ${i + 1}`, type: i === 0 ? 'main' : 'gallery' })),
+       contact: cached.contact || {},
+       policies: cached.policies || {},
+       nearbyAttractions: cached.nearby_attractions || []
      }}};
    }
- 
-   const name = cached?.name || slug.replace(/-/g, ' ');
    
-   const systemPrompt = `Ești expert în turism și ospitalitate. Generează DOAR format JSON valid.
- Creează informații complete și realiste despre cazări din România.`;
- 
-   const prompt = `Generează detalii pentru cazarea "${name}" din ${location}.
- JSON: {
-   "longDescription": "Descriere 200-300 cuvinte",
-   "checkIn": "14:00",
-   "checkOut": "11:00",
-   "facilities": ["Piscină", "Spa", "Restaurant"],
-   "roomTypes": [{"name": "Camera Standard", "capacity": 2, "price": 250, "features": ["TV", "Baie privată"]}],
-   "policies": {"cancellation": "Anulare gratuită 24h", "children": "Copii acceptați", "pets": "Fără animale"},
-   "nearbyAttractions": [{"name": "Atracție", "distance": "500m"}],
-   "contact": {"phone": "+40xxx", "email": "email@example.com"},
-   "bookingTips": ["Sfat 1", "Sfat 2"]
- }`;
- 
-   try {
-     const aiResponse = await callLovableAI(prompt, systemPrompt);
-     const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-     if (!jsonMatch) throw new Error('Invalid AI response');
-     
-     const details = JSON.parse(jsonMatch[0]);
-      const expiresAt = new Date(Date.now() + CACHE_HOURS_CONTENT * 60 * 60 * 1000).toISOString(); // 6 months
- 
-     if (cached) {
-       await supabase.from('cached_accommodations').update({
-         long_description: details.longDescription,
-         check_in: details.checkIn,
-         check_out: details.checkOut,
-         facilities: details.facilities,
-         room_types: details.roomTypes,
-         policies: details.policies,
-         nearby_attractions: details.nearbyAttractions,
-         contact: details.contact,
-         booking_tips: details.bookingTips,
-         expires_at: expiresAt
-       }).eq('id', cached.id);
-     }
- 
-     return { success: true, data: { accommodation: {
-       name: cached?.name || name,
-       slug,
-       type: cached?.type || 'Hotel',
-       city: location,
-       county,
-       ...cached,
-       ...details
-     }}};
-   } catch (error) {
-     console.error('Error:', error);
-     return { success: false, error: 'Failed to generate details' };
-   }
+   // If not in cache, return minimal data
+   const title = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+   return { success: true, data: { accommodation: {
+     name: title,
+     slug,
+     type: 'Cazare',
+     description: `Cazare în ${location}`,
+     city: location
+   }}};
  }
  
- async function getEventDetail(location: string, slug: string, county?: string) {
+ // ===== EVENTS - Simplified, from public sources =====
+ async function searchEvents(location: string, county?: string) {
    const { data: cached } = await supabase
      .from('cached_events')
      .select('*')
-     .eq('slug', slug)
      .ilike('location', `%${location}%`)
-     .maybeSingle();
+     .gt('expires_at', new Date().toISOString())
+     .or(`date.gt.${new Date().toISOString().split('T')[0]},date.is.null`)
+     .limit(10);
  
-  // Check if event exists and is still valid (not expired, not past date)
-  const today = new Date().toISOString().split('T')[0];
-  const now = new Date().toISOString();
-  
-  if (cached) {
-    // Check if event has passed
-    const eventDate = cached.date || cached.end_date;
-    const isPastEvent = eventDate && eventDate < today;
-    const isExpired = cached.expires_at && cached.expires_at < now;
-    
-    if (isPastEvent || isExpired) {
-      // Event has passed or expired - delete it and try to regenerate
-      console.log(`Event ${slug} has expired/passed, removing...`);
-      await supabase.from('cached_events').delete().eq('id', cached.id);
-      
-      // Return a message that event has ended
-      return { 
-        success: false, 
-        error: 'event_ended',
-        message: `Evenimentul "${cached.title}" s-a încheiat. Căutăm evenimente similare...`
-      };
-    }
-    
-     return { success: true, data: { event: {
-       title: cached.title,
-       slug: cached.slug,
-       date: cached.date,
-       endDate: cached.end_date,
-       time: cached.time,
-       venue: cached.venue,
-       location: cached.location,
-       county: cached.county,
-       description: cached.description,
-       longDescription: cached.long_description,
-       category: cached.category,
-       isPaid: cached.is_paid,
-       ticketPrice: cached.ticket_price,
-       ticketUrl: cached.ticket_url,
-       organizer: cached.organizer,
-       organizerContact: cached.organizer_contact,
-       imageKeywords: cached.image_keywords,
-       highlights: cached.highlights,
-       schedule: cached.schedule,
-       facilities: cached.facilities,
-       accessibility: cached.accessibility,
-       tips: cached.tips,
-       nearbyAttractions: cached.nearby_attractions,
-       coordinates: cached.latitude && cached.longitude ? { lat: cached.latitude, lng: cached.longitude } : null
-     }}};
+   if (cached && cached.length > 0) {
+     return { success: true, data: { events: cached.map(e => ({
+       title: e.title,
+       slug: e.slug,
+       date: e.date,
+       endDate: e.end_date,
+       time: e.time,
+       location: e.venue || location,
+       city: e.location,
+       description: e.description,
+       category: e.category,
+       isPaid: e.is_paid,
+       ticketPrice: e.ticket_price,
+       organizer: e.organizer,
+       imageKeywords: e.image_keywords
+     })) }};
    }
- 
-  // Event not found - try to regenerate events for this location
-  // This handles the case where someone accesses an old Google link
-  console.log(`Event ${slug} not found, triggering regeneration for ${location}`);
-  
-  // Trigger event search to regenerate
-  await searchEvents(location, county);
-  
-  // Try to find the event again
-  const { data: newCached } = await supabase
-    .from('cached_events')
-    .select('*')
-    .eq('slug', slug)
-    .ilike('location', `%${location}%`)
-    .maybeSingle();
-  
-  if (newCached) {
-    return { success: true, data: { event: {
-      title: newCached.title,
-      slug: newCached.slug,
-      date: newCached.date,
-      endDate: newCached.end_date,
-      time: newCached.time,
-      venue: newCached.venue,
-      location: newCached.location,
-      county: newCached.county,
-      description: newCached.description,
-      longDescription: newCached.long_description,
-      category: newCached.category,
-      isPaid: newCached.is_paid,
-      ticketPrice: newCached.ticket_price,
-      ticketUrl: newCached.ticket_url,
-      organizer: newCached.organizer,
-      organizerContact: newCached.organizer_contact,
-      imageKeywords: newCached.image_keywords,
-      highlights: newCached.highlights,
-      schedule: newCached.schedule,
-      facilities: newCached.facilities,
-      accessibility: newCached.accessibility,
-      tips: newCached.tips,
-      nearbyAttractions: newCached.nearby_attractions,
-      coordinates: newCached.latitude && newCached.longitude ? { lat: newCached.latitude, lng: newCached.longitude } : null
-    }}};
-  }
-  
-  return { 
-    success: false, 
-    error: 'event_not_found',
-    message: 'Evenimentul nu a fost găsit. Verifică lista de evenimente disponibile.'
-  };
- }
- 
- async function searchTraffic(location: string, county?: string) {
-   // Generate traffic info for the area
-   const systemPrompt = `Ești expert în trafic rutier în România. Generează DOAR format JSON valid.`;
    
-   const prompt = `Generează informații trafic pentru zona ${location}${county ? `, ${county}` : ''}.
- JSON: {
-   "restrictions": [{"road": "DN1", "description": "Lucrări km 45-50", "status": "works"}],
-   "tips": ["Sfat trafic 1", "Sfat 2"],
-   "tollInfo": "Informații despre taxe drum",
-   "alternativeRoutes": ["Rută alternativă 1"]
- }`;
+   // For events, we return empty if nothing cached
+   // Events need to be added manually or from specific event APIs
+   return { success: true, data: { events: [] } };
+ }
  
+ // ===== RESTAURANTS from OSM =====
+ async function searchRestaurants(location: string, county?: string) {
+   const coords = await getLocationCoords(location, county);
+   if (!coords) {
+     return { success: true, data: { restaurants: [] } };
+   }
+ 
+   const query = `
+     [out:json][timeout:25];
+     (
+       node["amenity"="restaurant"](around:5000,${coords.lat},${coords.lng});
+       node["amenity"="cafe"](around:5000,${coords.lat},${coords.lng});
+       node["amenity"="fast_food"](around:5000,${coords.lat},${coords.lng});
+     );
+     out body;
+   `;
+   
    try {
-     const aiResponse = await callLovableAI(prompt, systemPrompt);
-     const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-     if (!jsonMatch) throw new Error('Invalid AI response');
+     const res = await fetch('https://overpass-api.de/api/interpreter', {
+       method: 'POST',
+       headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': USER_AGENT },
+       body: `data=${encodeURIComponent(query)}`
+     });
      
-     const trafficInfo = JSON.parse(jsonMatch[0]);
-     return { success: true, data: { trafficInfo }};
-   } catch (error) {
-     return { success: true, data: { trafficInfo: { restrictions: [], tips: ['Verificați CNAIR pentru informații actualizate'], alternativeRoutes: [] }}};
+     if (!res.ok) return { success: true, data: { restaurants: [] } };
+     const data = await res.json();
+     const elements = data.elements || [];
+     
+     const restaurants = [];
+     
+     for (const el of elements.slice(0, 10)) {
+       const name = el.tags?.name;
+       if (!name) continue;
+       
+       const typeMap: Record<string, string> = {
+         restaurant: 'Restaurant',
+         cafe: 'Cafenea',
+         fast_food: 'Fast Food'
+       };
+       
+       const type = typeMap[el.tags?.amenity] || 'Restaurant';
+       const slug = generateSlug(name);
+       
+       const cuisine = el.tags?.cuisine?.split(';').map((c: string) => c.trim()) || [];
+       
+       restaurants.push({
+         name,
+         slug,
+         type,
+         description: el.tags?.description || `${type} în ${location}`,
+         priceRange: el.tags?.price || 'Contactați pentru preț',
+         rating: null,
+         cuisine,
+         location: location,
+         openingHours: el.tags?.opening_hours || null,
+         imageKeywords: `${type} ${location}`,
+         latitude: el.lat,
+         longitude: el.lon
+       });
+     }
+     
+     return { success: true, data: { restaurants } };
+   } catch (e) {
+     console.error('Restaurant search error:', e);
+     return { success: true, data: { restaurants: [] } };
    }
  }
  
+ // ===== TRAFFIC from CNAIR/INFOTRAFIC (placeholder) =====
+ async function searchTraffic(location: string, county?: string) {
+   // This would integrate with real traffic APIs
+   // For now, return basic structure
+   return { success: true, data: { trafficInfo: {
+     restrictions: [],
+     tips: ['Verificați condițiile de drum înainte de plecare'],
+     tollInfo: null,
+     alternativeRoutes: []
+   }}};
+ }
+ 
+ // ===== MAIN HANDLER =====
  Deno.serve(async (req) => {
    if (req.method === 'OPTIONS') {
      return new Response(null, { headers: corsHeaders });
@@ -653,16 +736,17 @@ const CACHE_HOURS_CONTENT = CACHE_MONTHS_CONTENT * 30 * 24; // ~6 months in hour
  
    try {
      const body: SearchRequest = await req.json();
-     const { type, location, county, slug } = body;
+     const { type, location, county, slug, latitude, longitude } = body;
+ 
+     console.log(`[search-local-info] ${type} for ${location}${county ? `, ${county}` : ''}`);
  
      let result;
- 
      switch (type) {
-       case 'events':
-         result = await searchEvents(location, county);
+       case 'attractions':
+         result = await searchAttractions(location, county);
          break;
-       case 'event-detail':
-         result = await getEventDetail(location, slug!, county);
+       case 'attraction-detail':
+         result = await getAttractionDetail(location, slug!, county);
          break;
        case 'accommodations':
          result = await searchAccommodations(location, county);
@@ -670,11 +754,11 @@ const CACHE_HOURS_CONTENT = CACHE_MONTHS_CONTENT * 30 * 24; // ~6 months in hour
        case 'accommodation-detail':
          result = await getAccommodationDetail(location, slug!, county);
          break;
-       case 'attractions':
-         result = await searchAttractions(location, county);
+       case 'events':
+         result = await searchEvents(location, county);
          break;
-       case 'attraction-detail':
-         result = await getAttractionDetail(location, slug!, county);
+       case 'restaurants':
+         result = await searchRestaurants(location, county);
          break;
        case 'traffic':
          result = await searchTraffic(location, county);
@@ -684,13 +768,17 @@ const CACHE_HOURS_CONTENT = CACHE_MONTHS_CONTENT * 30 * 24; // ~6 months in hour
      }
  
      return new Response(JSON.stringify(result), {
-       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
      });
+ 
    } catch (error) {
-     console.error('Error:', error);
-     return new Response(
-       JSON.stringify({ success: false, error: 'Internal server error' }),
-       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-     );
+     console.error('Search error:', error);
+     return new Response(JSON.stringify({
+       success: false,
+       error: error instanceof Error ? error.message : 'Search failed'
+     }), {
+       status: 500,
+       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+     });
    }
  });
