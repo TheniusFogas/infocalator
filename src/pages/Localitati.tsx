@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -6,8 +6,21 @@ import { CityCard } from "@/components/CityCard";
 import { StatCard } from "@/components/StatCard";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Building2, Landmark, TrendingUp, Users } from "lucide-react";
-import { fetchCities, fetchMajorCities, City } from "@/services/routeService";
+ import { Button } from "@/components/ui/button";
+ import { Search, Building2, Landmark, TrendingUp, Users, Loader2, ChevronDown } from "lucide-react";
+ import { supabase } from "@/integrations/supabase/client";
+ import { useDebounce } from "@/hooks/useDebounce";
+ 
+ interface Locality {
+   id: string;
+   name: string;
+   county: string;
+   population: number | null;
+   locality_type: string;
+   latitude: number;
+   longitude: number;
+   is_county_seat: boolean | null;
+ }
 
 const counties = [
   "Toate", "Alba", "Arad", "Argeș", "Bacău", "Bihor", "Bistrița-Năsăud", "Botoșani", "Brașov", "Brăila",
@@ -17,56 +30,141 @@ const counties = [
   "Tulcea", "Vaslui", "Vrancea", "Vâlcea"
 ];
 
-const cityTypes = ["Toate", "Oraș", "Oraș mic", "Sat", "Comună"];
+ const localityTypes = ["Toate", "Municipiu", "Oraș", "Comună", "Sat", "Stațiune"];
+ 
+ const ITEMS_PER_PAGE = 100;
 
 const LocalitatiPage = () => {
   const navigate = useNavigate();
-  const [cities, setCities] = useState<City[]>([]);
-  const [majorCities, setMajorCities] = useState<City[]>([]);
+   const [localities, setLocalities] = useState<Locality[]>([]);
+   const [majorLocalities, setMajorLocalities] = useState<Locality[]>([]);
   const [loading, setLoading] = useState(true);
+   const [loadingMore, setLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCounty, setSelectedCounty] = useState("Toate");
-  const [selectedType, setSelectedType] = useState("Toate");
+   const [selectedType, setSelectedType] = useState("Toate");
+   const [totalCount, setTotalCount] = useState(0);
+   const [currentPage, setCurrentPage] = useState(0);
+   const [hasMore, setHasMore] = useState(true);
+   
+   const debouncedSearch = useDebounce(searchQuery, 300);
+ 
+   // Fetch total counts and major localities
+   const fetchInitialData = useCallback(async () => {
+     try {
+       // Get total count
+       const { count } = await supabase
+         .from('localities')
+         .select('*', { count: 'exact', head: true });
+       
+       setTotalCount(count || 0);
+       
+       // Get major localities (municipalities and large cities)
+       const { data: majors } = await supabase
+         .from('localities')
+         .select('*')
+         .or('locality_type.eq.Municipiu,is_county_seat.eq.true')
+         .order('population', { ascending: false, nullsFirst: false })
+         .limit(50);
+       
+       setMajorLocalities(majors || []);
+     } catch (error) {
+       console.error('Error fetching initial data:', error);
+     }
+   }, []);
+ 
+   // Fetch filtered localities with pagination
+   const fetchLocalities = useCallback(async (page: number, append: boolean = false) => {
+     if (page === 0) {
+       setLoading(true);
+     } else {
+       setLoadingMore(true);
+     }
+     
+     try {
+       let query = supabase
+         .from('localities')
+         .select('*');
+       
+       // Apply search filter
+       if (debouncedSearch) {
+         const searchLower = debouncedSearch.toLowerCase()
+           .normalize('NFD')
+           .replace(/[\u0300-\u036f]/g, '')
+           .replace(/ș|Ș/g, 's')
+           .replace(/ț|Ț/g, 't')
+           .replace(/ă|Ă/g, 'a')
+           .replace(/â|Â/g, 'a')
+           .replace(/î|Î/g, 'i');
+         
+         query = query.or(`name_ascii.ilike.%${searchLower}%,name.ilike.%${debouncedSearch}%`);
+       }
+       
+       // Apply county filter
+       if (selectedCounty !== "Toate") {
+         query = query.eq('county', selectedCounty);
+       }
+       
+       // Apply type filter
+       if (selectedType !== "Toate") {
+         query = query.eq('locality_type', selectedType);
+       }
+       
+       // Order and paginate
+       query = query
+         .order('population', { ascending: false, nullsFirst: false })
+         .range(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE - 1);
+       
+       const { data, error } = await query;
+       
+       if (error) throw error;
+       
+       if (append) {
+         setLocalities(prev => [...prev, ...(data || [])]);
+       } else {
+         setLocalities(data || []);
+       }
+       
+       setHasMore((data?.length || 0) === ITEMS_PER_PAGE);
+       setCurrentPage(page);
+     } catch (error) {
+       console.error('Error fetching localities:', error);
+     } finally {
+       setLoading(false);
+       setLoadingMore(false);
+     }
+   }, [debouncedSearch, selectedCounty, selectedType]);
 
   useEffect(() => {
-    const loadData = async () => {
-      const [allCities, majors] = await Promise.all([
-        fetchCities(),
-        fetchMajorCities()
-      ]);
-      setCities(allCities);
-      setMajorCities(majors);
-      setLoading(false);
-    };
-    loadData();
+     fetchInitialData();
   }, []);
+ 
+   useEffect(() => {
+     fetchLocalities(0);
+   }, [debouncedSearch, selectedCounty, selectedType]);
+ 
+   const loadMore = () => {
+     if (!loadingMore && hasMore) {
+       fetchLocalities(currentPage + 1, true);
+     }
+   };
 
-  const filteredCities = useMemo(() => {
-    return cities.filter((city) => {
-      const matchesSearch = city.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           city.county.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCounty = selectedCounty === "Toate" || city.county === selectedCounty;
-      const matchesType = selectedType === "Toate" || city.city_type === selectedType;
-      return matchesSearch && matchesCounty && matchesType;
-    });
-  }, [cities, searchQuery, selectedCounty, selectedType]);
-
-  // Group cities by county
-  const citiesByCounty = useMemo(() => {
-    const grouped: Record<string, City[]> = {};
-    filteredCities.forEach((city) => {
-      if (!grouped[city.county]) {
-        grouped[city.county] = [];
+   // Group localities by county
+   const localitiesByCounty = useMemo(() => {
+     const grouped: Record<string, Locality[]> = {};
+     localities.forEach((loc) => {
+       if (!grouped[loc.county]) {
+         grouped[loc.county] = [];
       }
-      grouped[city.county].push(city);
+       grouped[loc.county].push(loc);
     });
-    return grouped;
-  }, [filteredCities]);
-
-  // Calculate total population
-  const totalPopulation = useMemo(() => {
-    return cities.reduce((sum, city) => sum + city.population, 0);
-  }, [cities]);
+     // Sort counties alphabetically
+     const sorted: Record<string, Locality[]> = {};
+     Object.keys(grouped).sort().forEach(key => {
+       sorted[key] = grouped[key];
+     });
+     return sorted;
+   }, [localities]);
 
   const formatPopulation = (pop: number) => {
     if (pop >= 1000000) {
@@ -74,11 +172,6 @@ const LocalitatiPage = () => {
     }
     return pop.toLocaleString();
   };
-
-  // Get unique counties count
-  const uniqueCounties = useMemo(() => {
-    return new Set(cities.map(c => c.county)).size;
-  }, [cities]);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -104,10 +197,10 @@ const LocalitatiPage = () => {
 
             {/* Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <StatCard icon={Building2} value={loading ? "..." : cities.length.toString()} label="Toate Orașele" />
-              <StatCard icon={Landmark} value={loading ? "..." : uniqueCounties.toString()} label="Județe" iconColor="text-warning" />
-              <StatCard icon={TrendingUp} value={loading ? "..." : majorCities.length.toString()} label="Orașe Majore" iconColor="text-success" />
-              <StatCard icon={Users} value={loading ? "..." : formatPopulation(totalPopulation)} label="Populație" iconColor="text-info" />
+               <StatCard icon={Building2} value={loading ? "..." : totalCount.toLocaleString()} label="Total Localități" />
+               <StatCard icon={Landmark} value="42" label="Județe" iconColor="text-warning" />
+               <StatCard icon={TrendingUp} value={loading ? "..." : majorLocalities.length.toString()} label="Municipii" iconColor="text-success" />
+               <StatCard icon={Users} value={loading ? "..." : localities.length.toLocaleString()} label="Afișate" iconColor="text-info" />
             </div>
           </div>
         </section>
@@ -162,7 +255,7 @@ const LocalitatiPage = () => {
                       <SelectValue placeholder="Toate" />
                     </SelectTrigger>
                     <SelectContent>
-                      {cityTypes.map((type) => (
+                       {localityTypes.map((type) => (
                         <SelectItem key={type} value={type}>
                           {type}
                         </SelectItem>
@@ -174,31 +267,31 @@ const LocalitatiPage = () => {
               
               <div className="mt-4 pt-4 border-t border-border">
                 <span className="text-sm text-muted-foreground">
-                  {loading ? "Se încarcă..." : `${filteredCities.length} rezultate`}
+                   {loading ? "Se încarcă..." : `${localities.length} din ${totalCount.toLocaleString()} localități`}
                 </span>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Major Cities Section */}
-        {!loading && majorCities.length > 0 && (
+         {/* Major Localities Section */}
+         {!loading && majorLocalities.length > 0 && !debouncedSearch && selectedCounty === "Toate" && selectedType === "Toate" && (
           <section className="px-4 pb-8">
             <div className="container mx-auto">
               <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-success" />
-                Orașe Majore
+                 Municipii și Reședințe de Județ
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                {majorCities.map((city) => (
+               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                 {majorLocalities.slice(0, 20).map((loc) => (
                   <CityCard
-                    key={city.id}
-                    name={city.name}
-                    county={city.county}
-                    population={city.population}
+                     key={loc.id}
+                     name={loc.name}
+                     county={loc.county}
+                     population={loc.population || 0}
                     type="major"
-                    cityType={city.city_type}
-                    onClick={() => navigate(`/localitati/${city.id}`)}
+                     cityType={loc.locality_type}
+                     onClick={() => navigate(`/localitati/${loc.id}`)}
                   />
                 ))}
               </div>
@@ -206,10 +299,14 @@ const LocalitatiPage = () => {
           </section>
         )}
 
-        {/* All Cities by County */}
+         {/* All Localities by County */}
         <section className="px-4 pb-12">
           <div className="container mx-auto">
-            <h2 className="text-xl font-bold text-foreground mb-6">Toate Orașele</h2>
+             <h2 className="text-xl font-bold text-foreground mb-6">
+               {debouncedSearch || selectedCounty !== "Toate" || selectedType !== "Toate" 
+                 ? "Rezultate" 
+                 : "Toate Localitățile"}
+             </h2>
             
             {loading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -220,27 +317,60 @@ const LocalitatiPage = () => {
                   </div>
                 ))}
               </div>
+             ) : localities.length === 0 ? (
+               <div className="text-center py-12 text-muted-foreground">
+                 <Search className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                 <p>Nu s-au găsit localități pentru criteriile selectate.</p>
+                 <p className="text-sm mt-2">Încearcă să modifici filtrele sau termenul de căutare.</p>
+               </div>
             ) : (
-              Object.entries(citiesByCounty).map(([county, countyCities]) => (
-                <div key={county} className="mb-8">
-                  <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-                    <Landmark className="w-4 h-4 text-primary" />
-                    {county} ({countyCities.length})
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                    {countyCities.map((city) => (
-                      <CityCard
-                        key={city.id}
-                        name={city.name}
-                        county={city.county}
-                        population={city.population}
-                        cityType={city.city_type}
-                        onClick={() => navigate(`/localitati/${city.id}`)}
-                      />
-                    ))}
+               <>
+                 {Object.entries(localitiesByCounty).map(([county, countyLocalities]) => (
+                   <div key={county} className="mb-8">
+                     <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+                       <Landmark className="w-4 h-4 text-primary" />
+                       {county} ({countyLocalities.length})
+                     </h3>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                       {countyLocalities.map((loc) => (
+                         <CityCard
+                           key={loc.id}
+                           name={loc.name}
+                           county={loc.county}
+                           population={loc.population || 0}
+                           cityType={loc.locality_type}
+                           onClick={() => navigate(`/localitati/${loc.id}`)}
+                         />
+                       ))}
+                     </div>
                   </div>
-                </div>
-              ))
+                 ))}
+                 
+                 {/* Load More Button */}
+                 {hasMore && (
+                   <div className="flex justify-center mt-8">
+                     <Button
+                       variant="outline"
+                       size="lg"
+                       onClick={loadMore}
+                       disabled={loadingMore}
+                       className="min-w-[200px]"
+                     >
+                       {loadingMore ? (
+                         <>
+                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                           Se încarcă...
+                         </>
+                       ) : (
+                         <>
+                           <ChevronDown className="w-4 h-4 mr-2" />
+                           Încarcă mai multe
+                         </>
+                       )}
+                     </Button>
+                   </div>
+                 )}
+               </>
             )}
           </div>
         </section>
