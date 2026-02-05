@@ -15,6 +15,36 @@
  const USER_AGENT = 'RomaniaTravel/1.0 (contact@disdis.ro)';
  const CACHE_HOURS = 6 * 30 * 24; // 6 months in hours
  
+// Valid image extensions - exclude PDFs, videos, documents
+const VALID_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+
+function isValidImageUrl(url: string): boolean {
+  if (!url) return false;
+  const lowerUrl = url.toLowerCase();
+  
+  // Exclude PDFs and documents
+  if (lowerUrl.includes('.pdf') || lowerUrl.includes('.doc') || lowerUrl.includes('.svg')) {
+    return false;
+  }
+  
+  // Exclude common bad patterns
+  const badPatterns = [
+    'monitorul_oficial', 'logo', 'icon', 'symbol', 'flag', 'coat_of_arms',
+    'signature', 'autograph', 'stamp', 'diagram', 'chart', 'wikidata',
+    'blason', 'stemă', 'emblem', 'banner', 'seal'
+  ];
+  
+  for (const pattern of badPatterns) {
+    if (lowerUrl.includes(pattern)) return false;
+  }
+  
+  // Must have valid image extension or be a Wikimedia thumbnail
+  const hasValidExtension = VALID_IMAGE_EXTENSIONS.some(ext => lowerUrl.includes(ext));
+  const isWikimediaThumb = lowerUrl.includes('upload.wikimedia.org');
+  
+  return hasValidExtension || isWikimediaThumb;
+}
+
  interface SearchRequest {
    query: string;
    type: 'events' | 'accommodations' | 'attractions' | 'traffic' | 'event-detail' | 'accommodation-detail' | 'attraction-detail' | 'restaurants';
@@ -76,15 +106,31 @@
  // ===== WIKIMEDIA COMMONS =====
  async function fetchWikimediaImages(query: string, limit: number = 5): Promise<Array<{ url: string; title: string }>> {
    try {
-     const searchUrl = `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query + ' Romania')}&srnamespace=6&srlimit=${limit}&format=json&origin=*`;
+    // Better search query - look for actual photos
+    const cleanQuery = query.replace(/România|Romania/gi, '').trim();
+    const searchTerms = `${cleanQuery} photograph -logo -map -diagram -coat -arms -blason`;
+    const searchUrl = `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(searchTerms + ' Romania')}&srnamespace=6&srlimit=${limit * 3}&format=json&origin=*`;
      const searchRes = await fetch(searchUrl, { headers: { 'User-Agent': USER_AGENT } });
      if (!searchRes.ok) return [];
      
      const searchData = await searchRes.json();
-     const titles = searchData.query?.search?.map((s: any) => s.title) || [];
-     if (titles.length === 0) return [];
+    const allTitles = searchData.query?.search?.map((s: any) => s.title) || [];
+    
+    // Filter out bad file names before API call
+    const titles = allTitles.filter((t: string) => {
+      const lower = t.toLowerCase();
+      return !lower.includes('.pdf') && 
+             !lower.includes('logo') && 
+             !lower.includes('map') && 
+             !lower.includes('coat_of_arms') &&
+             !lower.includes('monitorul') &&
+             !lower.includes('blason') &&
+             !lower.includes('stemă');
+    });
      
-     const infoUrl = `https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(titles.join('|'))}&prop=imageinfo&iiprop=url&iiurlwidth=640&format=json&origin=*`;
+    if (titles.length === 0) return [];
+    
+    const infoUrl = `https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(titles.slice(0, 10).join('|'))}&prop=imageinfo&iiprop=url|mime&iiurlwidth=640&format=json&origin=*`;
      const infoRes = await fetch(infoUrl, { headers: { 'User-Agent': USER_AGENT } });
      if (!infoRes.ok) return [];
      
@@ -94,10 +140,16 @@
      const images: Array<{ url: string; title: string }> = [];
      for (const pageId of Object.keys(pages)) {
        const page = pages[pageId];
-       const thumbUrl = page?.imageinfo?.[0]?.thumburl;
-       if (thumbUrl) {
+      const imageInfo = page?.imageinfo?.[0];
+      const thumbUrl = imageInfo?.thumburl;
+      const mimeType = imageInfo?.mime || '';
+      
+      // Only accept actual images with valid URLs
+      if (thumbUrl && mimeType.startsWith('image/') && isValidImageUrl(thumbUrl)) {
          images.push({ url: thumbUrl, title: page.title?.replace('File:', '') || '' });
        }
+      
+      if (images.length >= limit) break;
      }
      return images;
    } catch (e) {
@@ -271,7 +323,17 @@
      
      // Try to get description from Wikipedia
      const wikiContent = await fetchWikipediaContent(name);
-     const images = await fetchWikimediaImages(name);
+      
+      // Prioritize Wikipedia thumbnail, then Wikimedia Commons search
+      let bestImageUrl = '';
+      if (wikiContent?.image && isValidImageUrl(wikiContent.image)) {
+        bestImageUrl = wikiContent.image;
+      } else {
+        const images = await fetchWikimediaImages(name);
+        if (images.length > 0) {
+          bestImageUrl = images[0].url;
+        }
+      }
      
      const attraction = {
        title: name,
@@ -280,7 +342,7 @@
        description: wikiContent?.extract?.substring(0, 300) || poi.tags?.description || `Obiectiv turistic în ${location}`,
        location: location,
        tips: poi.tags?.note || null,
-       imageKeywords: images[0]?.url || name,
+        imageKeywords: bestImageUrl || name,
        isPaid: poi.tags?.fee === 'yes',
        entryFee: poi.tags?.charge || null,
        openingHours: poi.tags?.opening_hours || null,
@@ -316,7 +378,15 @@
      const wikiResults = await searchWikipedia(`${location} obiective turistice`);
      for (const result of wikiResults.slice(0, 8)) {
        const wikiContent = await fetchWikipediaContent(result.title);
-       const images = await fetchWikimediaImages(result.title);
+        
+        // Prioritize Wikipedia thumbnail
+        let imageUrl = '';
+        if (wikiContent?.image && isValidImageUrl(wikiContent.image)) {
+          imageUrl = wikiContent.image;
+        } else {
+          const images = await fetchWikimediaImages(result.title);
+          if (images.length > 0) imageUrl = images[0].url;
+        }
        
        attractions.push({
          title: result.title,
@@ -325,7 +395,7 @@
          description: wikiContent?.extract?.substring(0, 300) || result.description,
          location: location,
          tips: null,
-         imageKeywords: images[0]?.url || result.title,
+          imageKeywords: imageUrl || result.title,
          isPaid: false,
          entryFee: null,
          openingHours: null,

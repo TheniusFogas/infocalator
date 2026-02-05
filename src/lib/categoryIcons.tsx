@@ -167,7 +167,26 @@ export const getUnsplashImage = (keywords: string, width = 800, height = 600): s
 export const getPlaceholderImage = (keywords: string, width = 800, height = 600): string => {
   // If keywords looks like a URL, return it directly
   if (keywords && keywords.startsWith('http')) {
-    return keywords;
+    // Validate it's an actual image URL, not a PDF or document
+    const lowerUrl = keywords.toLowerCase();
+    const isValidImage = 
+      !lowerUrl.includes('.pdf') &&
+      !lowerUrl.includes('.doc') &&
+      !lowerUrl.includes('.svg') &&
+      !lowerUrl.includes('monitorul_oficial') &&
+      !lowerUrl.includes('logo') &&
+      !lowerUrl.includes('coat_of_arms') &&
+      (lowerUrl.includes('.jpg') || 
+       lowerUrl.includes('.jpeg') || 
+       lowerUrl.includes('.png') || 
+       lowerUrl.includes('.webp') ||
+       lowerUrl.includes('thumb') ||
+       lowerUrl.includes('/commons/'));
+    
+    if (isValidImage) {
+      return keywords;
+    }
+    // Fall through to generate abstract gradient if URL is not valid image
   }
   
   // Generate abstract gradient as fallback instead of random photos
