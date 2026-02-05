@@ -39,6 +39,8 @@ import { RecommendedAttractions } from "@/components/RecommendedAttractions";
 import { NearbyAttractionsClickable } from "@/components/NearbyAttractionsClickable";
 import { RealImage } from "@/components/RealImage";
 import { AdZone } from "@/components/AdZone";
+import { SidebarEventsList } from "@/components/SidebarEventsList";
+import { TrafficInfo } from "@/components/TrafficInfo";
 import { accommodationTypeIcons, amenityIcons, getCategoryIcon, getPlaceholderImage, priceRangeColors } from "@/lib/categoryIcons";
 
 const CazareDetailPage = () => {
@@ -152,13 +154,11 @@ const CazareDetailPage = () => {
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
               {/* Main Image */}
               <div className="md:col-span-8 relative aspect-[16/10] rounded-2xl overflow-hidden">
-                <RealImage
-                  name={accommodation.name}
-                  location={accommodation.city || location}
-                  type="accommodation"
+                <img
+                  src={images[Math.min(selectedImage, images.length - 1)]?.url}
+                  alt={images[Math.min(selectedImage, images.length - 1)]?.alt || accommodation.name}
                   className="w-full h-full object-cover"
-                  width={1200}
-                  height={800}
+                  loading="eager"
                 />
                 <div className="absolute top-4 left-4 flex gap-2">
                   <Badge className="flex items-center gap-2 bg-background/90 text-foreground">
@@ -359,10 +359,16 @@ const CazareDetailPage = () => {
 
                 {/* Ad Zone */}
                 <AdZone zoneKey="in_content" />
+
+                {/* Traffic info */}
+                <TrafficInfo location={accommodation.city || location} county={county} />
               </div>
 
               {/* Sidebar */}
               <div className="space-y-4">
+                {/* Events in Sidebar */}
+                <SidebarEventsList location={accommodation.city || location} county={county} />
+
                 {/* Price Card */}
                 <Card className="border-primary/20">
                   <CardContent className="pt-6">
