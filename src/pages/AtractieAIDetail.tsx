@@ -1,4 +1,4 @@
- import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -19,7 +19,9 @@ import {
   Lightbulb
 } from "lucide-react";
  import { localInfoApi, AIAttractionDetail } from "@/lib/api/localInfo";
-import { WeatherForecast } from "@/components/WeatherForecast";
+import { WeatherInline } from "@/components/WeatherInline";
+import { NearbyAttractionsClickable } from "@/components/NearbyAttractionsClickable";
+import { RealImage } from "@/components/RealImage";
 import { EventsList } from "@/components/EventsList";
 import { AccommodationsList } from "@/components/AccommodationsList";
 import { attractionCategoryIcons, getCategoryIcon, getPlaceholderImage } from "@/lib/categoryIcons";
@@ -34,6 +36,7 @@ const AtractieAIDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState(0);
+  const [realImageUrl, setRealImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchAttraction = async () => {
@@ -60,28 +63,6 @@ const AtractieAIDetailPage = () => {
   }, [slug, location, county]);
 
   const CategoryIcon = attraction ? getCategoryIcon(attraction.category, attractionCategoryIcons) : MapPin;
- 
-   // Generate images from API or fallback to placeholders - always 8+ images
-   const images = useMemo(() => {
-     if (!attraction) return [];
-     if (attraction.images && attraction.images.length > 0) {
-       return attraction.images.map(img => ({
-         url: getPlaceholderImage(img.url, 1200, 800),
-         alt: img.alt
-       }));
-     }
-     // Fallback to generated placeholders
-     return [
-       { url: getPlaceholderImage(attraction.imageKeywords || attraction.title || 'romania tourist attraction', 1200, 800), alt: attraction.title || 'Atracție' },
-       { url: getPlaceholderImage(`${attraction.category} ${attraction.location} romania`, 1200, 800), alt: `${attraction.category} în ${attraction.location}` },
-       { url: getPlaceholderImage(`turism ${attraction.location} romania panorama`, 1200, 800), alt: `Turism ${attraction.location}` },
-       { url: getPlaceholderImage(`landscape ${attraction.category} nature`, 1200, 800), alt: `Peisaj ${attraction.category}` },
-       { url: getPlaceholderImage(`${attraction.title} historical view`, 1200, 800), alt: `Vedere ${attraction.title}` },
-       { url: getPlaceholderImage(`romania travel ${attraction.category}`, 1200, 800), alt: `Călătorie România` },
-       { url: getPlaceholderImage(`heritage site ${attraction.location}`, 1200, 800), alt: `Patrimoniu ${attraction.location}` },
-       { url: getPlaceholderImage(`tourism destination ${attraction.category} romania`, 1200, 800), alt: `Destinație turistică` },
-     ];
-   }, [attraction]);
 
   if (loading) {
     return (
@@ -141,10 +122,13 @@ const AtractieAIDetailPage = () => {
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
               {/* Main Image */}
               <div className="md:col-span-8 relative aspect-[16/10] rounded-2xl overflow-hidden">
-                <img 
-                  src={images[selectedImage]?.url} 
-                  alt={images[selectedImage]?.alt}
+                <RealImage
+                  name={attraction.title}
+                  location={attraction.location}
+                  type="attraction"
                   className="w-full h-full object-cover"
+                  width={1200}
+                  height={800}
                 />
                 <div className="absolute top-4 left-4 flex gap-2">
                   <Badge className="flex items-center gap-2 bg-background/90 text-foreground">
@@ -156,7 +140,14 @@ const AtractieAIDetailPage = () => {
               
               {/* Thumbnail Grid */}
               <div className="md:col-span-4 grid grid-cols-3 md:grid-cols-2 gap-2">
-                {images.slice(0, 6).map((img, index) => (
+                {[
+                  attraction.title,
+                  `${attraction.category} ${attraction.location}`,
+                  `turism ${attraction.location}`,
+                  `${attraction.location} Romania`,
+                  county || attraction.location,
+                  `peisaj ${attraction.category}`
+                ].map((keyword, index) => (
                   <button
                     key={index}
                     onClick={() => setSelectedImage(index)}
@@ -164,10 +155,13 @@ const AtractieAIDetailPage = () => {
                       selectedImage === index ? 'border-primary' : 'border-transparent'
                     }`}
                   >
-                    <img 
-                      src={img.url.replace('1200/800', '400/400')} 
-                      alt={img.alt}
+                    <RealImage
+                      name={keyword}
+                      location={attraction.location}
+                      type="attraction"
                       className="w-full h-full object-cover hover:scale-105 transition-transform"
+                      width={400}
+                      height={400}
                     />
                   </button>
                 ))}
@@ -316,24 +310,11 @@ const AtractieAIDetailPage = () => {
  
                  {/* Nearby Attractions */}
                  {attraction.nearbyAttractions && attraction.nearbyAttractions.length > 0 && (
-                   <Card>
-                     <CardHeader>
-                       <CardTitle className="text-lg flex items-center gap-2">
-                         <MapPin className="w-5 h-5 text-primary" />
-                         Atracții în apropiere
-                       </CardTitle>
-                     </CardHeader>
-                     <CardContent>
-                       <ul className="space-y-2">
-                         {attraction.nearbyAttractions.map((nearby, i) => (
-                           <li key={i} className="flex items-center justify-between text-sm">
-                             <span className="text-foreground">{nearby.name}</span>
-                             <Badge variant="outline">{nearby.distance}</Badge>
-                           </li>
-                         ))}
-                       </ul>
-                     </CardContent>
-                   </Card>
+                  <NearbyAttractionsClickable
+                    attractions={attraction.nearbyAttractions}
+                    currentLocation={attraction.location}
+                    county={county}
+                  />
                  )}
 
                 {/* Related Content */}
@@ -394,6 +375,16 @@ const AtractieAIDetailPage = () => {
                      )}
                   </CardContent>
                 </Card>
+
+                {/* Weather */}
+                {attraction.coordinates && (
+                  <WeatherInline
+                    latitude={attraction.coordinates.lat}
+                    longitude={attraction.coordinates.lng}
+                    cityName={attraction.city || attraction.location}
+                    variant="sidebar"
+                  />
+                )}
 
                 {/* Actions */}
                 <Card>

@@ -24,6 +24,9 @@ import { EventsList } from "@/components/EventsList";
 import { AccommodationsList } from "@/components/AccommodationsList";
 import { AIAttractionsList } from "@/components/AIAttractionsList";
 import { TrafficInfo } from "@/components/TrafficInfo";
+import { WeatherInline } from "@/components/WeatherInline";
+import { NearbyAttractionsClickable } from "@/components/NearbyAttractionsClickable";
+import { RealImage } from "@/components/RealImage";
 
  interface Locality {
   id: string;
@@ -201,8 +204,21 @@ const LocalitateDetailPage = () => {
         </section>
 
         {/* Hero */}
-        <section className="px-4 py-8 bg-card border-b border-border">
-          <div className="container mx-auto">
+        <section className="px-4 py-8 bg-card border-b border-border relative overflow-hidden">
+          {/* Background Image */}
+          <div className="absolute inset-0 opacity-20">
+            <RealImage
+              name={locality.name}
+              location={locality.county}
+              type="locality"
+              className="w-full h-full object-cover"
+              width={1920}
+              height={400}
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-card/50 to-card" />
+          </div>
+          
+          <div className="container mx-auto relative z-10">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div>
                 <div className="flex items-center gap-3 mb-2">
@@ -216,14 +232,13 @@ const LocalitateDetailPage = () => {
                 </p>
               </div>
               
-              {weather && (
-                <div className="flex items-center gap-3 bg-background rounded-xl p-4 border border-border">
-                  <span className="text-4xl">{weather.icon}</span>
-                  <div>
-                    <p className="text-2xl font-bold text-foreground">{weather.temperature}°C</p>
-                    <p className="text-sm text-muted-foreground">{weather.description}</p>
-                  </div>
-                </div>
+              {locality.latitude && locality.longitude && (
+                <WeatherInline
+                  latitude={locality.latitude}
+                  longitude={locality.longitude}
+                  cityName={locality.name}
+                  variant="compact"
+                />
               )}
             </div>
           </div>
@@ -330,7 +345,17 @@ const LocalitateDetailPage = () => {
                   </Card>
                 )}
 
-                {/* AI-Generated Content */}
+                {/* Weather Forecast */}
+                {locality.latitude && locality.longitude && (
+                  <WeatherInline
+                    latitude={locality.latitude}
+                    longitude={locality.longitude}
+                    cityName={locality.name}
+                    variant="full"
+                  />
+                )}
+
+                {/* AI-Generated Attractions */}
                <AIAttractionsList location={locality.name} county={locality.county} />
                <EventsList location={locality.name} county={locality.county} />
                <AccommodationsList location={locality.name} county={locality.county} />
