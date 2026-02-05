@@ -18,11 +18,17 @@ import {
   Loader2,
   Plus,
   Trash2,
-  ExternalLink
+   ExternalLink,
+   Landmark,
+   Building2,
+   Database
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { lovable } from '@/integrations/lovable/index';
 import { toast } from 'sonner';
+ import { AdminAttractions } from '@/components/admin/AdminAttractions';
+ import { AdminAccommodations } from '@/components/admin/AdminAccommodations';
+ import { AdminDataSources } from '@/components/admin/AdminDataSources';
 
 interface AdZone {
   id: string;
@@ -286,6 +292,18 @@ const AdminPage = () => {
               <Link2 className="w-4 h-4" />
               Link-uri Afiliate
             </TabsTrigger>
+             <TabsTrigger value="attractions" className="gap-2">
+               <Landmark className="w-4 h-4" />
+               Atracții
+             </TabsTrigger>
+             <TabsTrigger value="accommodations" className="gap-2">
+               <Building2 className="w-4 h-4" />
+               Cazări
+             </TabsTrigger>
+             <TabsTrigger value="datasources" className="gap-2">
+               <Database className="w-4 h-4" />
+               Surse Date
+             </TabsTrigger>
             <TabsTrigger value="settings" className="gap-2">
               <Settings className="w-4 h-4" />
               Setări
@@ -432,6 +450,18 @@ const AdminPage = () => {
             </Card>
           </TabsContent>
 
+           <TabsContent value="attractions">
+             <AdminAttractions />
+           </TabsContent>
+ 
+           <TabsContent value="accommodations">
+             <AdminAccommodations />
+           </TabsContent>
+ 
+           <TabsContent value="datasources">
+             <AdminDataSources />
+           </TabsContent>
+ 
           <TabsContent value="settings" className="space-y-4">
             <Card>
               <CardHeader>

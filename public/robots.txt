@@ -1,8 +1,12 @@
 User-agent: Googlebot
 Allow: /
+ Disallow: /admin
+ Disallow: /autentificare
 
 User-agent: Bingbot
 Allow: /
+ Disallow: /admin
+ Disallow: /autentificare
 
 User-agent: Twitterbot
 Allow: /
@@ -12,3 +16,7 @@ Allow: /
 
 User-agent: *
 Allow: /
+ Disallow: /admin
+ Disallow: /autentificare
+ 
+ Sitemap: https://artgrup.lovable.app/sitemap.xml

@@ -10,6 +10,7 @@ import { UsefulLinksWidget } from "@/components/UsefulLinksWidget";
 import { TourismCategoriesWidget } from "@/components/TourismCategoriesWidget";
 import { fetchRoutes, Route } from "@/services/routeService";
  import { useNavigate } from "react-router-dom";
+ import { SEOHead } from "@/components/SEOHead";
 
 const Index = () => {
   const [routes, setRoutes] = useState<Route[]>([]);
@@ -27,6 +28,23 @@ const Index = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
+       <SEOHead 
+         title="DrumBun România - Planificator Rute și Informații Turistice"
+         description="Planifică-ți călătoria în România cu DrumBun. Calcul rute, prețuri carburanți, condiții drumuri, atracții turistice și cazări. Ghidul tău complet pentru drumuri bune!"
+         canonical="https://artgrup.lovable.app"
+         jsonLd={{
+           '@context': 'https://schema.org',
+           '@type': 'WebSite',
+           name: 'DrumBun România',
+           url: 'https://artgrup.lovable.app',
+           description: 'Planificator de rute și ghid turistic pentru România',
+           potentialAction: {
+             '@type': 'SearchAction',
+             target: 'https://artgrup.lovable.app/localitati?q={search_term_string}',
+             'query-input': 'required name=search_term_string',
+           },
+         }}
+       />
       <Header />
       
       <main className="flex-1">
