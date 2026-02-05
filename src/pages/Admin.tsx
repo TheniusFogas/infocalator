@@ -21,7 +21,8 @@ import {
    ExternalLink,
    Landmark,
    Building2,
-   Database
+   Database,
+   Info
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { lovable } from '@/integrations/lovable/index';
@@ -408,6 +409,9 @@ const AdminPage = () => {
                           )}
                           placeholder="ex: 123456"
                         />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          ID-ul tău de afiliat pentru această platformă
+                        </p>
                       </div>
                       <div>
                         <Label>Parametri Tracking</Label>
@@ -418,6 +422,9 @@ const AdminPage = () => {
                           )}
                           placeholder="ex: utm_source=drumbun&utm_medium=affiliate"
                         />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Parametri UTM sau alți parametri de tracking
+                        </p>
                       </div>
                       <div>
                         <Label>Prioritate</Label>
@@ -428,6 +435,9 @@ const AdminPage = () => {
                             links.map(l => l.id === link.id ? { ...l, priority: parseInt(e.target.value) } : l)
                           )}
                         />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Cu cât mai mare, cu atât apare mai sus
+                        </p>
                       </div>
                     </div>
                     <Button 
@@ -446,6 +456,95 @@ const AdminPage = () => {
                     </Button>
                   </div>
                 ))}
+              </CardContent>
+            </Card>
+
+            {/* Suggested Platforms */}
+            <Card className="border-dashed">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Info className="w-5 h-5 text-primary" />
+                  Platforme sugerate pentru afiliere
+                </CardTitle>
+                <CardDescription>
+                  Aceste platforme oferă programe de afiliere pentru turism și cazări. Înscrie-te și adaugă ID-ul tău de afiliat.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-lg border border-border bg-muted/30">
+                    <h4 className="font-semibold text-foreground mb-1">Booking.com Partner</h4>
+                    <p className="text-sm text-muted-foreground mb-2">Comision 25-40% din profitul Booking</p>
+                    <a 
+                      href="https://www.booking.com/affiliate-program.html" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary text-sm hover:underline flex items-center gap-1"
+                    >
+                      Înscrie-te <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <div className="p-4 rounded-lg border border-border bg-muted/30">
+                    <h4 className="font-semibold text-foreground mb-1">Travelminit Afiliat</h4>
+                    <p className="text-sm text-muted-foreground mb-2">Program de afiliere pentru pensiuni din România</p>
+                    <a 
+                      href="https://www.travelminit.ro" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary text-sm hover:underline flex items-center gap-1"
+                    >
+                      Contact <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <div className="p-4 rounded-lg border border-border bg-muted/30">
+                    <h4 className="font-semibold text-foreground mb-1">Airbnb Associate</h4>
+                    <p className="text-sm text-muted-foreground mb-2">Câștigă per rezervare nouă</p>
+                    <a 
+                      href="https://www.airbnb.com/associates" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary text-sm hover:underline flex items-center gap-1"
+                    >
+                      Înscrie-te <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <div className="p-4 rounded-lg border border-border bg-muted/30">
+                    <h4 className="font-semibold text-foreground mb-1">TripAdvisor</h4>
+                    <p className="text-sm text-muted-foreground mb-2">Program de parteneriat turism</p>
+                    <a 
+                      href="https://www.tripadvisor.com/Affiliates" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary text-sm hover:underline flex items-center gap-1"
+                    >
+                      Înscrie-te <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <div className="p-4 rounded-lg border border-border bg-muted/30">
+                    <h4 className="font-semibold text-foreground mb-1">Viator</h4>
+                    <p className="text-sm text-muted-foreground mb-2">Afiliați pentru tururi și excursii</p>
+                    <a 
+                      href="https://www.viator.com/partners" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary text-sm hover:underline flex items-center gap-1"
+                    >
+                      Înscrie-te <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <div className="p-4 rounded-lg border border-border bg-muted/30">
+                    <h4 className="font-semibold text-foreground mb-1">GetYourGuide</h4>
+                    <p className="text-sm text-muted-foreground mb-2">Comision pentru activități turistice</p>
+                    <a 
+                      href="https://partner.getyourguide.com" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary text-sm hover:underline flex items-center gap-1"
+                    >
+                      Înscrie-te <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

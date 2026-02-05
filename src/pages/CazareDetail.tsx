@@ -32,10 +32,12 @@ import {
   Cigarette
 } from "lucide-react";
 import { localInfoApi, AccommodationDetail } from "@/lib/api/localInfo";
-import { WeatherWidget } from "@/components/WeatherWidget";
+import { WeatherInline } from "@/components/WeatherInline";
 import { AffiliateBookingLinks } from "@/components/AffiliateBookingLinks";
 import { RecommendedAccommodations } from "@/components/RecommendedAccommodations";
 import { RecommendedAttractions } from "@/components/RecommendedAttractions";
+import { NearbyAttractionsClickable } from "@/components/NearbyAttractionsClickable";
+import { RealImage } from "@/components/RealImage";
 import { AdZone } from "@/components/AdZone";
 import { accommodationTypeIcons, amenityIcons, getCategoryIcon, getPlaceholderImage, priceRangeColors } from "@/lib/categoryIcons";
 
@@ -151,10 +153,13 @@ const CazareDetailPage = () => {
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
               {/* Main Image */}
               <div className="md:col-span-8 relative aspect-[16/10] rounded-2xl overflow-hidden">
-                <img 
-                  src={images[selectedImage]?.url} 
-                  alt={images[selectedImage]?.alt}
+                <RealImage
+                  name={accommodation.name}
+                  location={accommodation.city || location}
+                  type="accommodation"
                   className="w-full h-full object-cover"
+                  width={1200}
+                  height={800}
                 />
                 <div className="absolute top-4 left-4 flex gap-2">
                   <Badge className="flex items-center gap-2 bg-background/90 text-foreground">
@@ -345,11 +350,11 @@ const CazareDetailPage = () => {
 
                 {/* Weather Widget */}
                 {accommodation.coordinates && (
-                  <WeatherWidget 
-                    latitude={accommodation.coordinates.lat} 
+                  <WeatherInline
+                    latitude={accommodation.coordinates.lat}
                     longitude={accommodation.coordinates.lng}
                     cityName={accommodation.city || location}
-                    compact
+                    variant="compact"
                   />
                 )}
 
@@ -468,23 +473,24 @@ const CazareDetailPage = () => {
                   </CardContent>
                 </Card>
 
+                {/* Weather Sidebar */}
+                {accommodation.coordinates && (
+                  <WeatherInline
+                    latitude={accommodation.coordinates.lat}
+                    longitude={accommodation.coordinates.lng}
+                    cityName={accommodation.city || location}
+                    variant="sidebar"
+                  />
+                )}
+
                 {/* Nearby Attractions */}
                 {accommodation.nearbyAttractions && accommodation.nearbyAttractions.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">În apropiere</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        {accommodation.nearbyAttractions.map((attraction, index) => (
-                          <div key={index} className="flex items-center justify-between text-sm">
-                            <span className="text-foreground">{attraction.name}</span>
-                            <Badge variant="outline">{attraction.distance}</Badge>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <NearbyAttractionsClickable
+                    attractions={accommodation.nearbyAttractions}
+                    currentLocation={accommodation.city || location}
+                    county={county}
+                    title="Ce poți vizita în apropiere"
+                  />
                 )}
 
                 {/* Recommended Accommodations */}

@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import { localInfoApi, EventDetail } from "@/lib/api/localInfo";
 import { WeatherForecast } from "@/components/WeatherForecast";
+import { WeatherInline } from "@/components/WeatherInline";
+import { RealImage } from "@/components/RealImage";
 import { eventCategoryIcons, getCategoryIcon, getPlaceholderImage } from "@/lib/categoryIcons";
 
 const EvenimentDetailPage = () => {
@@ -123,10 +125,13 @@ const EvenimentDetailPage = () => {
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
               {/* Main Image */}
               <div className="md:col-span-8 relative aspect-[16/10] rounded-2xl overflow-hidden">
-                <img 
-                  src={images[selectedImage]?.url} 
-                  alt={images[selectedImage]?.alt}
+                <RealImage
+                  name={event.title}
+                  location={event.location}
+                  type="event"
                   className="w-full h-full object-cover"
+                  width={1200}
+                  height={800}
                 />
                 <div className="absolute top-4 left-4">
                   <Badge className="flex items-center gap-2 bg-background/90 text-foreground">
@@ -254,18 +259,33 @@ const EvenimentDetailPage = () => {
 
                 {/* Weather Forecast for Event Date */}
                 {event.coordinates && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">Prognoza meteo pentru data evenimentului</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <WeatherForecast 
-                        latitude={event.coordinates.lat} 
-                        longitude={event.coordinates.lng}
-                        cityName={event.city}
-                      />
-                    </CardContent>
-                  </Card>
+                  <>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Calendar className="w-5 h-5 text-primary" />
+                          Prognoza meteo pentru {event.date}{event.endDate ? ` - ${event.endDate}` : ''}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <WeatherInline
+                          latitude={event.coordinates.lat}
+                          longitude={event.coordinates.lng}
+                          cityName={event.city || event.location}
+                          eventDate={event.date}
+                          eventEndDate={event.endDate}
+                          variant="full"
+                        />
+                      </CardContent>
+                    </Card>
+                    
+                    {/* 7-day forecast for reference */}
+                    <WeatherForecast 
+                      latitude={event.coordinates.lat} 
+                      longitude={event.coordinates.lng}
+                      cityName={event.city}
+                    />
+                  </>
                 )}
 
                 {/* Facilities */}
