@@ -11,8 +11,49 @@
  
  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
  
- // Cache duration in hours
- const CACHE_HOURS = 24;
+// Cache durations
+const CACHE_HOURS_EVENTS = 24 * 7; // 7 days for regenerated events
+const CACHE_MONTHS_CONTENT = 6; // 6 months for attractions/accommodations/localities
+const CACHE_HOURS_CONTENT = CACHE_MONTHS_CONTENT * 30 * 24; // ~6 months in hours
+ 
+ // Fetch real image from Wikimedia Commons
+ async function fetchWikimediaImage(searchQuery: string): Promise<string | null> {
+   try {
+     // Search Wikimedia Commons
+     const searchUrl = `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(searchQuery + ' Romania')}&srnamespace=6&srlimit=1&format=json&origin=*`;
+     
+     const searchRes = await fetch(searchUrl, {
+       headers: { 'User-Agent': 'RomaniaTravel/1.0 (contact@disdis.ro)' }
+     });
+     
+     if (!searchRes.ok) return null;
+     const searchData = await searchRes.json();
+     
+     const title = searchData.query?.search?.[0]?.title;
+     if (!title) return null;
+     
+     // Get image URL
+     const infoUrl = `https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(title)}&prop=imageinfo&iiprop=url&iiurlwidth=640&format=json&origin=*`;
+     
+     const infoRes = await fetch(infoUrl, {
+       headers: { 'User-Agent': 'RomaniaTravel/1.0 (contact@disdis.ro)' }
+     });
+     
+     if (!infoRes.ok) return null;
+     const infoData = await infoRes.json();
+     
+     const pages = infoData.query?.pages || {};
+     for (const pageId of Object.keys(pages)) {
+       const thumbUrl = pages[pageId]?.imageinfo?.[0]?.thumburl;
+       if (thumbUrl) return thumbUrl;
+     }
+     
+     return null;
+   } catch (error) {
+     console.error('Wikimedia fetch error:', error);
+     return null;
+   }
+ }
  
  interface SearchRequest {
    query: string;
@@ -61,12 +102,13 @@
  }
  
  async function searchEvents(location: string, county?: string) {
-   // Check cache first
+  // Check cache first - only return non-expired events
    const { data: cached } = await supabase
      .from('cached_events')
      .select('*')
      .ilike('location', `%${location}%`)
      .gt('expires_at', new Date().toISOString())
+    .or(`date.gt.${new Date().toISOString().split('T')[0]},date.is.null`) // Only future events
      .limit(10);
  
    if (cached && cached.length > 0) {
@@ -105,7 +147,8 @@
      if (!jsonMatch) throw new Error('Invalid AI response');
      
      const events = JSON.parse(jsonMatch[0]);
-     const expiresAt = new Date(Date.now() + CACHE_HOURS * 60 * 60 * 1000).toISOString();
+      // Events expire based on their end date or 7 days after the event
+      const defaultExpiry = new Date(Date.now() + CACHE_HOURS_EVENTS * 60 * 60 * 1000).toISOString();
  
      // Cache results
      for (const event of events) {
@@ -127,7 +170,11 @@
          organizer: event.organizer,
          image_keywords: event.imageKeywords,
          highlights: event.highlights,
-         expires_at: expiresAt
+          expires_at: event.endDate 
+            ? new Date(new Date(event.endDate).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days after event ends
+            : event.date 
+              ? new Date(new Date(event.date).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days after event date
+              : defaultExpiry
        }, { onConflict: 'slug,location' });
      }
  
@@ -176,7 +223,7 @@
      if (!jsonMatch) throw new Error('Invalid AI response');
      
      const accommodations = JSON.parse(jsonMatch[0]);
-     const expiresAt = new Date(Date.now() + CACHE_HOURS * 60 * 60 * 1000).toISOString();
+      const expiresAt = new Date(Date.now() + CACHE_HOURS_CONTENT * 60 * 60 * 1000).toISOString(); // 6 months
  
      for (const acc of accommodations) {
        const slug = generateSlug(acc.name);
@@ -245,10 +292,14 @@
      if (!jsonMatch) throw new Error('Invalid AI response');
      
      const attractions = JSON.parse(jsonMatch[0]);
-     const expiresAt = new Date(Date.now() + CACHE_HOURS * 60 * 60 * 1000).toISOString();
+      const expiresAt = new Date(Date.now() + CACHE_HOURS_CONTENT * 60 * 60 * 1000).toISOString(); // 6 months
  
      for (const attr of attractions) {
        const slug = generateSlug(attr.title);
+      
+      // Try to fetch real image from Wikimedia
+      const realImageUrl = await fetchWikimediaImage(attr.title + ' ' + location);
+      
        await supabase.from('cached_attractions').upsert({
          slug,
          location,
@@ -257,7 +308,7 @@
          category: attr.category,
          description: attr.description,
          tips: attr.tips,
-         image_keywords: attr.imageKeywords,
+        image_keywords: realImageUrl || attr.imageKeywords, // Use real image URL if found
          is_paid: attr.isPaid,
          entry_fee: attr.entryFee,
          opening_hours: attr.openingHours,
@@ -267,7 +318,11 @@
        }, { onConflict: 'slug,location' });
      }
  
-     return { success: true, data: { attractions: attractions.map((a: any) => ({ ...a, slug: generateSlug(a.title), location })) }};
+    return { success: true, data: { attractions: attractions.map((a: any) => ({ 
+      ...a, 
+      slug: generateSlug(a.title), 
+      location 
+    })) }};
    } catch (error) {
      console.error('Error generating attractions:', error);
      return { success: false, error: 'Failed to generate attractions' };
@@ -331,7 +386,7 @@
      if (!jsonMatch) throw new Error('Invalid AI response');
      
      const details = JSON.parse(jsonMatch[0]);
-     const expiresAt = new Date(Date.now() + CACHE_HOURS * 60 * 60 * 1000).toISOString();
+      const expiresAt = new Date(Date.now() + CACHE_HOURS_CONTENT * 60 * 60 * 1000).toISOString(); // 6 months
  
      // Update cache with details
      if (cached) {
@@ -425,7 +480,7 @@
      if (!jsonMatch) throw new Error('Invalid AI response');
      
      const details = JSON.parse(jsonMatch[0]);
-     const expiresAt = new Date(Date.now() + CACHE_HOURS * 60 * 60 * 1000).toISOString();
+      const expiresAt = new Date(Date.now() + CACHE_HOURS_CONTENT * 60 * 60 * 1000).toISOString(); // 6 months
  
      if (cached) {
        await supabase.from('cached_accommodations').update({
@@ -465,7 +520,29 @@
      .ilike('location', `%${location}%`)
      .maybeSingle();
  
-   if (cached) {
+  // Check if event exists and is still valid (not expired, not past date)
+  const today = new Date().toISOString().split('T')[0];
+  const now = new Date().toISOString();
+  
+  if (cached) {
+    // Check if event has passed
+    const eventDate = cached.date || cached.end_date;
+    const isPastEvent = eventDate && eventDate < today;
+    const isExpired = cached.expires_at && cached.expires_at < now;
+    
+    if (isPastEvent || isExpired) {
+      // Event has passed or expired - delete it and try to regenerate
+      console.log(`Event ${slug} has expired/passed, removing...`);
+      await supabase.from('cached_events').delete().eq('id', cached.id);
+      
+      // Return a message that event has ended
+      return { 
+        success: false, 
+        error: 'event_ended',
+        message: `Evenimentul "${cached.title}" s-a încheiat. Căutăm evenimente similare...`
+      };
+    }
+    
      return { success: true, data: { event: {
        title: cached.title,
        slug: cached.slug,
@@ -494,7 +571,55 @@
      }}};
    }
  
-   return { success: false, error: 'Event not found' };
+  // Event not found - try to regenerate events for this location
+  // This handles the case where someone accesses an old Google link
+  console.log(`Event ${slug} not found, triggering regeneration for ${location}`);
+  
+  // Trigger event search to regenerate
+  await searchEvents(location, county);
+  
+  // Try to find the event again
+  const { data: newCached } = await supabase
+    .from('cached_events')
+    .select('*')
+    .eq('slug', slug)
+    .ilike('location', `%${location}%`)
+    .maybeSingle();
+  
+  if (newCached) {
+    return { success: true, data: { event: {
+      title: newCached.title,
+      slug: newCached.slug,
+      date: newCached.date,
+      endDate: newCached.end_date,
+      time: newCached.time,
+      venue: newCached.venue,
+      location: newCached.location,
+      county: newCached.county,
+      description: newCached.description,
+      longDescription: newCached.long_description,
+      category: newCached.category,
+      isPaid: newCached.is_paid,
+      ticketPrice: newCached.ticket_price,
+      ticketUrl: newCached.ticket_url,
+      organizer: newCached.organizer,
+      organizerContact: newCached.organizer_contact,
+      imageKeywords: newCached.image_keywords,
+      highlights: newCached.highlights,
+      schedule: newCached.schedule,
+      facilities: newCached.facilities,
+      accessibility: newCached.accessibility,
+      tips: newCached.tips,
+      nearbyAttractions: newCached.nearby_attractions,
+      coordinates: newCached.latitude && newCached.longitude ? { lat: newCached.latitude, lng: newCached.longitude } : null
+    }}};
+  }
+  
+  return { 
+    success: false, 
+    error: 'event_not_found',
+    message: 'Evenimentul nu a fost găsit. Verifică lista de evenimente disponibile.'
+  };
  }
  
  async function searchTraffic(location: string, county?: string) {

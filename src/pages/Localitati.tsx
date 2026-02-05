@@ -7,11 +7,12 @@ import { StatCard } from "@/components/StatCard";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
  import { Button } from "@/components/ui/button";
- import { Search, Building2, Landmark, TrendingUp, Users, Loader2, ChevronDown } from "lucide-react";
+ import { Search, Building2, Landmark, TrendingUp, Users, Loader2, ChevronDown, Navigation } from "lucide-react";
  import { MapPin } from "lucide-react";
  import { supabase } from "@/integrations/supabase/client";
  import { useDebounce } from "@/hooks/useDebounce";
  import { useGlobalGeocode, GeoLocation } from "@/hooks/useGlobalGeocode";
+ import { Slider } from "@/components/ui/slider";
  
  interface Locality {
    id: string;
@@ -22,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
    latitude: number;
    longitude: number;
    is_county_seat: boolean | null;
+   distance?: number; // km from selected locality
  }
 
 const counties = [
@@ -35,6 +37,20 @@ const counties = [
  const localityTypes = ["Toate", "Municipiu", "Oraș", "Comună", "Sat", "Stațiune"];
  
  const ITEMS_PER_PAGE = 100;
+ const DEFAULT_RADIUS_KM = 30;
+ 
+ // Haversine formula for distance between two coordinates
+ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+   const R = 6371; // Earth radius in km
+   const dLat = (lat2 - lat1) * Math.PI / 180;
+   const dLon = (lon2 - lon1) * Math.PI / 180;
+   const a = 
+     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+     Math.sin(dLon / 2) * Math.sin(dLon / 2);
+   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+   return R * c;
+ }
 
 const LocalitatiPage = () => {
   const navigate = useNavigate();
@@ -54,6 +70,12 @@ const LocalitatiPage = () => {
    const [suggestions, setSuggestions] = useState<GeoLocation[]>([]);
    const [showSuggestions, setShowSuggestions] = useState(false);
    const searchRef = useRef<HTMLDivElement>(null);
+   
+   // Nearby localities state
+   const [selectedLocality, setSelectedLocality] = useState<GeoLocation | null>(null);
+   const [nearbyLocalities, setNearbyLocalities] = useState<Locality[]>([]);
+   const [radiusKm, setRadiusKm] = useState(DEFAULT_RADIUS_KM);
+   const [loadingNearby, setLoadingNearby] = useState(false);
  
    const debouncedSearch = useDebounce(searchQuery, 300);
  
@@ -175,14 +197,67 @@ const LocalitatiPage = () => {
      return () => document.removeEventListener('mousedown', handleClickOutside);
    }, []);
  
+   // Fetch nearby localities when a locality is selected
+   const fetchNearbyLocalities = useCallback(async (lat: number, lng: number, radius: number) => {
+     setLoadingNearby(true);
+     try {
+       // Get all localities and filter by distance (Supabase doesn't have native geo queries)
+       const { data } = await supabase
+         .from('localities')
+         .select('*')
+         .gte('latitude', lat - (radius / 111)) // rough bounding box
+         .lte('latitude', lat + (radius / 111))
+         .gte('longitude', lng - (radius / (111 * Math.cos(lat * Math.PI / 180))))
+         .lte('longitude', lng + (radius / (111 * Math.cos(lat * Math.PI / 180))));
+       
+       if (data) {
+         // Calculate exact distance and filter
+         const nearby = data
+           .map(loc => ({
+             ...loc,
+             distance: calculateDistance(lat, lng, loc.latitude, loc.longitude)
+           }))
+           .filter(loc => loc.distance <= radius && loc.distance > 0.5) // Exclude the selected one
+           .sort((a, b) => a.distance - b.distance);
+         
+         setNearbyLocalities(nearby);
+       }
+     } catch (error) {
+       console.error('Error fetching nearby:', error);
+     } finally {
+       setLoadingNearby(false);
+     }
+   }, []);
+ 
    const handleSuggestionClick = (suggestion: GeoLocation) => {
      setShowSuggestions(false);
-     setSearchQuery('');
-     // Navigate to locality detail
-     if (suggestion.id) {
-       navigate(`/localitati/${suggestion.id}`);
+     setSearchQuery(suggestion.name);
+     setSelectedLocality(suggestion);
+     
+     // Fetch nearby localities
+     if (suggestion.latitude && suggestion.longitude) {
+       fetchNearbyLocalities(suggestion.latitude, suggestion.longitude, radiusKm);
      }
    };
+   
+   const handleViewDetail = (localityId: string) => {
+     navigate(`/localitati/${localityId}`);
+   };
+   
+   // Update nearby when radius changes
+   useEffect(() => {
+     if (selectedLocality?.latitude && selectedLocality?.longitude) {
+       fetchNearbyLocalities(selectedLocality.latitude, selectedLocality.longitude, radiusKm);
+     }
+   }, [radiusKm, selectedLocality, fetchNearbyLocalities]);
+   
+   // Clear selection when search is cleared
+   useEffect(() => {
+     if (!searchQuery) {
+       setSelectedLocality(null);
+       setNearbyLocalities([]);
+     }
+   }, [searchQuery]);
  
    const loadMore = () => {
      if (!loadingMore && hasMore) {
@@ -301,6 +376,24 @@ const LocalitatiPage = () => {
                     </div>
                   )}
                 </div>
+                
+                {/* Radius Slider - shown when locality is selected */}
+                {selectedLocality && (
+                  <div>
+                    <label className="text-sm text-muted-foreground mb-2 block flex items-center gap-1">
+                      <Navigation className="w-4 h-4" />
+                      Rază căutare: {radiusKm} km
+                    </label>
+                    <Slider
+                      value={[radiusKm]}
+                      onValueChange={(v) => setRadiusKm(v[0])}
+                      min={5}
+                      max={100}
+                      step={5}
+                      className="w-full"
+                    />
+                  </div>
+                )}
 
                 {/* County Filter */}
                 <div>
@@ -344,16 +437,68 @@ const LocalitatiPage = () => {
               </div>
               
               <div className="mt-4 pt-4 border-t border-border">
-                <span className="text-sm text-muted-foreground">
-                   {loading ? "Se încarcă..." : `${localities.length} din ${totalCount.toLocaleString()} localități`}
-                </span>
+                {selectedLocality ? (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">
+                      {loadingNearby ? "Se caută..." : `${nearbyLocalities.length} localități în raza de ${radiusKm} km de ${selectedLocality.name}`}
+                    </span>
+                    <Button 
+                      variant="link" 
+                      size="sm" 
+                      onClick={() => handleViewDetail(selectedLocality.id!)}
+                      className="text-primary"
+                    >
+                      Vezi detalii {selectedLocality.name} →
+                    </Button>
+                  </div>
+                ) : (
+                  <span className="text-sm text-muted-foreground">
+                    {loading ? "Se încarcă..." : `${localities.length} din ${totalCount.toLocaleString()} localități`}
+                  </span>
+                )}
               </div>
             </div>
           </div>
         </section>
+ 
+        {/* Nearby Localities Section - shown when a locality is selected */}
+        {selectedLocality && nearbyLocalities.length > 0 && (
+          <section className="px-4 pb-8">
+            <div className="container mx-auto">
+              <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
+                <Navigation className="w-5 h-5 text-primary" />
+                Localități în apropiere de {selectedLocality.name}
+                <span className="text-sm font-normal text-muted-foreground">({radiusKm} km)</span>
+              </h2>
+              {loadingNearby ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {nearbyLocalities.slice(0, 20).map((loc) => (
+                    <CityCard
+                      key={loc.id}
+                      name={loc.name}
+                      county={loc.county}
+                      population={loc.population || 0}
+                      cityType={loc.locality_type}
+                      onClick={() => handleViewDetail(loc.id)}
+                      extra={
+                        <span className="text-xs text-primary font-medium">
+                          {loc.distance?.toFixed(1)} km
+                        </span>
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
-         {/* Major Localities Section */}
-         {!loading && majorLocalities.length > 0 && !debouncedSearch && selectedCounty === "Toate" && selectedType === "Toate" && (
+        {/* Major Localities Section - hide when searching nearby */}
+        {!selectedLocality && !loading && majorLocalities.length > 0 && !debouncedSearch && selectedCounty === "Toate" && selectedType === "Toate" && (
           <section className="px-4 pb-8">
             <div className="container mx-auto">
               <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
@@ -377,7 +522,8 @@ const LocalitatiPage = () => {
           </section>
         )}
 
-         {/* All Localities by County */}
+        {/* All Localities by County - hide when searching nearby */}
+        {!selectedLocality && (
         <section className="px-4 pb-12">
           <div className="container mx-auto">
              <h2 className="text-xl font-bold text-foreground mb-6">
@@ -452,6 +598,7 @@ const LocalitatiPage = () => {
             )}
           </div>
         </section>
+        )}
       </main>
 
       <Footer />
