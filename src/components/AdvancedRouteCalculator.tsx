@@ -1,5 +1,5 @@
  import { useState, useEffect, useCallback } from "react";
- import { MapPin, ArrowRightLeft, Navigation, Clock, Route as RouteIcon, Fuel, AlertTriangle, ChevronDown, ChevronUp, Settings } from "lucide-react";
+ import { MapPin, ArrowRightLeft, Navigation, Clock, Route as RouteIcon, Fuel, ChevronDown, ChevronUp, Settings, History, Globe } from "lucide-react";
  import { Button } from "@/components/ui/button";
  import { Input } from "@/components/ui/input";
  import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,18 +7,11 @@
  import { Separator } from "@/components/ui/separator";
  import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
  import { RouteMap } from "@/components/RouteMap";
+ import { TravelAlertsPanel } from "@/components/TravelAlertsPanel";
  import { useDebounce } from "@/hooks/useDebounce";
+ import { useGlobalGeocode, GeoLocation } from "@/hooks/useGlobalGeocode";
+ import { cacheRoute, getCachedRoute, getRecentRoutes, CachedRoute } from "@/lib/routeCache";
  import { supabase } from "@/integrations/supabase/client";
- 
- interface Locality {
-   id?: string;
-   name: string;
-   county: string;
-   latitude: number;
-   longitude: number;
-   type?: string;
-   population?: number;
- }
  
  interface RouteStep {
    instruction: string;
@@ -49,132 +42,78 @@
  export const AdvancedRouteCalculator = () => {
    const [departure, setDeparture] = useState("");
    const [destination, setDestination] = useState("");
-   const [departureLocality, setDepartureLocality] = useState<Locality | null>(null);
-   const [destinationLocality, setDestinationLocality] = useState<Locality | null>(null);
-   const [departureSuggestions, setDepartureSuggestions] = useState<Locality[]>([]);
-   const [destinationSuggestions, setDestinationSuggestions] = useState<Locality[]>([]);
+   const [departureLocation, setDepartureLocation] = useState<GeoLocation | null>(null);
+   const [destinationLocation, setDestinationLocation] = useState<GeoLocation | null>(null);
+   const [departureSuggestions, setDepartureSuggestions] = useState<GeoLocation[]>([]);
+   const [destinationSuggestions, setDestinationSuggestions] = useState<GeoLocation[]>([]);
    const [showDepartureSuggestions, setShowDepartureSuggestions] = useState(false);
    const [showDestinationSuggestions, setShowDestinationSuggestions] = useState(false);
    const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
    const [alternativeRoutes, setAlternativeRoutes] = useState<AlternativeRoute[]>([]);
+   const [selectedAltIndex, setSelectedAltIndex] = useState(-1);
    const [isCalculating, setIsCalculating] = useState(false);
    const [showSettings, setShowSettings] = useState(false);
    const [showSteps, setShowSteps] = useState(true);
+   const [recentRoutes, setRecentRoutes] = useState<CachedRoute[]>([]);
    
    // Fuel calculation settings
    const [fuelConsumption, setFuelConsumption] = useState(DEFAULT_FUEL_CONSUMPTION);
    const [fuelPrice, setFuelPrice] = useState(DEFAULT_FUEL_PRICE);
    
+   // Global geocoding hook
+   const { searchLocations, isSearching } = useGlobalGeocode();
+   
    const debouncedDeparture = useDebounce(departure, 300);
    const debouncedDestination = useDebounce(destination, 300);
  
-   // Search localities using geocode edge function
-   const searchLocalities = async (query: string): Promise<Locality[]> => {
-     if (!query || query.length < 2) return [];
-     
-     try {
-       // First search in local DB
-       const { data: localData } = await supabase
-         .from("localities")
-         .select("*")
-         .ilike("name", `%${query}%`)
-         .order("population", { ascending: false })
-         .limit(5);
-       
-       if (localData && localData.length > 0) {
-         return localData.map(l => ({
-           id: l.id,
-           name: l.name,
-           county: l.county,
-           latitude: Number(l.latitude),
-           longitude: Number(l.longitude),
-           type: l.locality_type,
-           population: l.population || 0
-         }));
-       }
-       
-       // Fallback to existing cities table
-       const { data: citiesData } = await supabase
-         .from("cities")
-         .select("*")
-         .ilike("name", `%${query}%`)
-         .order("population", { ascending: false })
-         .limit(5);
-       
-       if (citiesData && citiesData.length > 0) {
-         return citiesData.map(c => ({
-           id: c.id,
-           name: c.name,
-           county: c.county,
-           latitude: c.latitude || 0,
-           longitude: c.longitude || 0,
-           type: c.city_type,
-           population: c.population
-         }));
-       }
-       
-       // Fallback to geocode
-       const { data } = await supabase.functions.invoke("geocode-location", {
-         body: { query }
-       });
-       
-       if (data?.results) {
-         return data.results.map((r: any) => ({
-           name: r.name,
-           county: r.county || "",
-           latitude: r.latitude,
-           longitude: r.longitude,
-           type: r.type
-         }));
-       }
-       
-       return [];
-     } catch (error) {
-       console.error("Error searching localities:", error);
-       return [];
-     }
-   };
+   // Load recent routes on mount
+   useEffect(() => {
+     setRecentRoutes(getRecentRoutes(5));
+   }, []);
  
    useEffect(() => {
      const search = async () => {
-       const results = await searchLocalities(debouncedDeparture);
+       const results = await searchLocations(debouncedDeparture);
        setDepartureSuggestions(results);
        setShowDepartureSuggestions(results.length > 0);
      };
-     if (debouncedDeparture.length >= 2 && !departureLocality) search();
-   }, [debouncedDeparture, departureLocality]);
+     if (debouncedDeparture.length >= 2 && !departureLocation) search();
+   }, [debouncedDeparture, departureLocation, searchLocations]);
  
    useEffect(() => {
      const search = async () => {
-       const results = await searchLocalities(debouncedDestination);
+       const results = await searchLocations(debouncedDestination);
        setDestinationSuggestions(results);
        setShowDestinationSuggestions(results.length > 0);
      };
-     if (debouncedDestination.length >= 2 && !destinationLocality) search();
-   }, [debouncedDestination, destinationLocality]);
+     if (debouncedDestination.length >= 2 && !destinationLocation) search();
+   }, [debouncedDestination, destinationLocation, searchLocations]);
  
-   const selectDeparture = (locality: Locality) => {
-     setDeparture(locality.name);
-     setDepartureLocality(locality);
+   const selectDeparture = (location: GeoLocation) => {
+     setDeparture(location.name);
+     setDepartureLocation(location);
      setShowDepartureSuggestions(false);
      setRouteResult(null);
+     setSelectedAltIndex(-1);
    };
  
-   const selectDestination = (locality: Locality) => {
-     setDestination(locality.name);
-     setDestinationLocality(locality);
+   const selectDestination = (location: GeoLocation) => {
+     setDestination(location.name);
+     setDestinationLocation(location);
      setShowDestinationSuggestions(false);
      setRouteResult(null);
+     setSelectedAltIndex(-1);
    };
  
    const swapLocations = () => {
      const tempName = departure;
-     const tempLocality = departureLocality;
+     const tempLocation = departureLocation;
      setDeparture(destination);
-     setDepartureLocality(destinationLocality);
+     setDepartureLocation(destinationLocation);
      setDestination(tempName);
-     setDestinationLocality(tempLocality);
+     setDestinationLocation(tempLocation);
      setRouteResult(null);
+     setSelectedAltIndex(-1);
    };
  
    const parseOSRMSteps = (legs: any[]): RouteStep[] => {
@@ -238,17 +177,36 @@
    };
  
    const handleCalculateRoute = async () => {
-     if (!departureLocality || !destinationLocality) return;
+     if (!departureLocation || !destinationLocation) return;
  
      setIsCalculating(true);
      setAlternativeRoutes([]);
+     setSelectedAltIndex(-1);
      
      try {
+       // Check cache first
+       const cached = getCachedRoute(departureLocation.name, destinationLocation.name);
+       if (cached) {
+         setRouteResult({
+           distance: cached.distance,
+           duration: cached.duration,
+           coordinates: cached.coordinates,
+           steps: cached.steps || [],
+           fuelCost: cached.fuelCost,
+           tollCost: 0
+         });
+         if (cached.alternatives) {
+           setAlternativeRoutes(cached.alternatives);
+         }
+         setIsCalculating(false);
+         return;
+       }
+       
        // Primary route
        const response = await fetch(
          `https://router.project-osrm.org/route/v1/driving/` +
-         `${departureLocality.longitude},${departureLocality.latitude};` +
-         `${destinationLocality.longitude},${destinationLocality.latitude}` +
+         `${departureLocation.longitude},${departureLocation.latitude};` +
+         `${destinationLocation.longitude},${destinationLocation.latitude}` +
          `?overview=full&geometries=geojson&steps=true&alternatives=true`
        );
        
@@ -279,9 +237,11 @@
          tollCost: 0
        });
        
+       const alternatives: AlternativeRoute[] = [];
+       
        // Parse alternative routes
        if (data.routes.length > 1) {
-         const alternatives: AlternativeRoute[] = data.routes.slice(1, 3).map((route: any, idx: number) => {
+         data.routes.slice(1, 4).forEach((route: any, idx: number) => {
            const altDistance = Math.round(route.distance / 1000);
            const altDuration = Math.round(route.duration / 60);
            const altFuelNeeded = (altDistance * fuelConsumption) / 100;
@@ -290,7 +250,7 @@
              (coord: [number, number]) => [coord[1], coord[0]]
            );
            
-           return {
+           alternatives.push({
              name: `Rută alternativă ${idx + 1}`,
              description: altDistance > distance ? "Mai lungă dar poate mai rapidă" : "Mai scurtă",
              distance: altDistance,
@@ -304,15 +264,30 @@
                distance: distance - altDistance,
                fuel: Math.round((fuelCost - altFuelCost) * 100) / 100
              }
-           };
+           });
          });
          setAlternativeRoutes(alternatives);
        }
        
+       // Cache the result
+       cacheRoute({
+         fromName: departureLocation.name,
+         toName: destinationLocation.name,
+         distance,
+         duration,
+         coordinates,
+         steps,
+         fuelCost,
+         alternatives
+       });
+       
+       // Update recent routes
+       setRecentRoutes(getRecentRoutes(5));
+       
        // Save route to DB for statistics
        await supabase.from("saved_routes").upsert({
-         from_name: departureLocality.name,
-         to_name: destinationLocality.name,
+         from_name: departureLocation.name,
+         to_name: destinationLocation.name,
          distance_km: distance,
          duration_minutes: duration,
          fuel_consumption_estimate: fuelNeeded,
@@ -333,7 +308,14 @@
      return `${hours}h ${mins}min`;
    };
  
-   const canCalculate = departureLocality?.latitude && destinationLocality?.latitude;
+   const handleSelectAlternative = (index: number) => {
+     setSelectedAltIndex(index);
+     if (alternativeRoutes[index]) {
+       setRouteResult(alternativeRoutes[index]);
+     }
+   };
+ 
+   const canCalculate = departureLocation?.latitude && destinationLocation?.latitude;
  
    return (
      <div className="space-y-6">
@@ -344,32 +326,46 @@
            <div className="flex-1 w-full relative">
              <label className="text-sm font-medium text-foreground mb-2 block">Plecare</label>
              <div className="relative">
-               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-green-500" />
+               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
                <Input
                  value={departure}
                  onChange={(e) => {
                    setDeparture(e.target.value);
-                   setDepartureLocality(null);
+                   setDepartureLocation(null);
                  }}
                  onFocus={() => departureSuggestions.length > 0 && setShowDepartureSuggestions(true)}
-                 placeholder="ex. București, Brașov, Sibiu..."
+                 placeholder="ex. București, Viena, Paris..."
                  className="pl-11 h-12 bg-background"
                />
+               {isSearching && (
+                 <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-muted-foreground/30 border-t-primary rounded-full animate-spin" />
+               )}
              </div>
              {showDepartureSuggestions && (
                <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                 {departureSuggestions.map((locality, idx) => (
+                 {departureSuggestions.map((location, idx) => (
                    <button
-                     key={locality.id || idx}
-                     onClick={() => selectDeparture(locality)}
+                     key={location.id || idx}
+                     onClick={() => selectDeparture(location)}
                      className="w-full px-4 py-3 text-left hover:bg-accent transition-colors flex items-center gap-2"
                    >
-                     <MapPin className="w-4 h-4 text-muted-foreground" />
-                     <span className="font-medium">{locality.name}</span>
-                     <span className="text-sm text-muted-foreground">({locality.county || locality.type})</span>
-                     {locality.population && locality.population > 10000 && (
+                     {location.isLocal ? (
+                       <MapPin className="w-4 h-4 text-primary" />
+                     ) : (
+                       <Globe className="w-4 h-4 text-muted-foreground" />
+                     )}
+                     <span className="font-medium">{location.name}</span>
+                     <span className="text-sm text-muted-foreground">
+                       ({location.county || location.country || location.type})
+                     </span>
+                     {location.population && location.population > 10000 && (
                        <Badge variant="secondary" className="ml-auto text-xs">
-                         {(locality.population / 1000).toFixed(0)}k loc.
+                         {(location.population / 1000).toFixed(0)}k
+                       </Badge>
+                     )}
+                     {!location.isLocal && (
+                       <Badge variant="outline" className="ml-auto text-xs">
+                         Global
                        </Badge>
                      )}
                    </button>
@@ -392,29 +388,40 @@
            <div className="flex-1 w-full relative">
              <label className="text-sm font-medium text-foreground mb-2 block">Destinație</label>
              <div className="relative">
-               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-red-500" />
+               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
                <Input
                  value={destination}
                  onChange={(e) => {
                    setDestination(e.target.value);
-                   setDestinationLocality(null);
+                   setDestinationLocation(null);
                  }}
                  onFocus={() => destinationSuggestions.length > 0 && setShowDestinationSuggestions(true)}
-                 placeholder="ex. Cluj-Napoca, Timișoara..."
+                 placeholder="ex. Cluj-Napoca, Berlin, Milano..."
                  className="pl-11 h-12 bg-background"
                />
              </div>
              {showDestinationSuggestions && (
                <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                 {destinationSuggestions.map((locality, idx) => (
+                 {destinationSuggestions.map((location, idx) => (
                    <button
-                     key={locality.id || idx}
-                     onClick={() => selectDestination(locality)}
+                     key={location.id || idx}
+                     onClick={() => selectDestination(location)}
                      className="w-full px-4 py-3 text-left hover:bg-accent transition-colors flex items-center gap-2"
                    >
-                     <MapPin className="w-4 h-4 text-muted-foreground" />
-                     <span className="font-medium">{locality.name}</span>
-                     <span className="text-sm text-muted-foreground">({locality.county || locality.type})</span>
+                     {location.isLocal ? (
+                       <MapPin className="w-4 h-4 text-primary" />
+                     ) : (
+                       <Globe className="w-4 h-4 text-muted-foreground" />
+                     )}
+                     <span className="font-medium">{location.name}</span>
+                     <span className="text-sm text-muted-foreground">
+                       ({location.county || location.country || location.type})
+                     </span>
+                     {!location.isLocal && (
+                       <Badge variant="outline" className="ml-auto text-xs">
+                         Global
+                       </Badge>
+                     )}
                    </button>
                  ))}
                </div>
@@ -449,7 +456,7 @@
          {/* Fuel Settings */}
          <Collapsible open={showSettings} onOpenChange={setShowSettings}>
            <CollapsibleContent className="mt-4 pt-4 border-t border-border">
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                <div>
                  <label className="text-sm font-medium text-foreground mb-2 block">
                    Consum mediu (L/100km)
@@ -478,6 +485,31 @@
                    className="h-10"
                  />
                </div>
+               <div>
+                 <label className="text-sm font-medium text-foreground mb-2 block">
+                   Căutări recente
+                 </label>
+                 {recentRoutes.length > 0 ? (
+                   <div className="flex flex-wrap gap-1">
+                     {recentRoutes.slice(0, 3).map((route, idx) => (
+                       <Badge 
+                         key={idx}
+                         variant="outline" 
+                         className="cursor-pointer hover:bg-accent text-xs"
+                         onClick={() => {
+                           setDeparture(route.fromName);
+                           setDestination(route.toName);
+                         }}
+                       >
+                         <History className="w-3 h-3 mr-1" />
+                         {route.fromName} → {route.toName}
+                       </Badge>
+                     ))}
+                   </div>
+                 ) : (
+                   <p className="text-xs text-muted-foreground">Nicio căutare recentă</p>
+                 )}
+               </div>
              </div>
            </CollapsibleContent>
          </Collapsible>
@@ -488,15 +520,23 @@
          {/* Map */}
          <div className="lg:col-span-2 bg-card rounded-2xl border border-border overflow-hidden h-[500px]">
            <RouteMap
-             startCoords={departureLocality?.latitude && departureLocality?.longitude 
-               ? [departureLocality.latitude, departureLocality.longitude] 
+             startCoords={departureLocation?.latitude && departureLocation?.longitude 
+               ? [departureLocation.latitude, departureLocation.longitude] 
                : undefined}
-             endCoords={destinationLocality?.latitude && destinationLocality?.longitude 
-               ? [destinationLocality.latitude, destinationLocality.longitude] 
+             endCoords={destinationLocation?.latitude && destinationLocation?.longitude 
+               ? [destinationLocation.latitude, destinationLocation.longitude] 
                : undefined}
-             startName={departureLocality?.name}
-             endName={destinationLocality?.name}
+             startName={departureLocation?.name}
+             endName={destinationLocation?.name}
              routeCoordinates={routeResult?.coordinates || []}
+             alternativeRoutes={alternativeRoutes.map(alt => ({
+               coordinates: alt.coordinates,
+               name: alt.name,
+               distance: alt.distance,
+               duration: alt.duration
+             }))}
+             selectedAlternativeIndex={selectedAltIndex}
+             onSelectAlternative={handleSelectAlternative}
            />
          </div>
  
@@ -527,8 +567,8 @@
                    </div>
                    
                    {/* Fuel Cost */}
-                   <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 flex items-center gap-3">
-                     <Fuel className="w-5 h-5 text-amber-600" />
+                   <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 flex items-center gap-3">
+                     <Fuel className="w-5 h-5 text-primary" />
                      <div>
                        <p className="text-sm text-muted-foreground">Cost combustibil estimat</p>
                        <p className="text-xl font-bold text-foreground">{routeResult.fuelCost} RON</p>
@@ -588,8 +628,12 @@
                  {alternativeRoutes.map((alt, idx) => (
                    <div 
                      key={idx}
-                     className="p-3 rounded-lg border border-border hover:border-primary/50 cursor-pointer transition-colors"
-                     onClick={() => setRouteResult(alt)}
+                     className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                       selectedAltIndex === idx 
+                         ? 'border-primary bg-primary/5' 
+                         : 'border-border hover:border-primary/50'
+                     }`}
+                     onClick={() => handleSelectAlternative(idx)}
                    >
                      <div className="flex items-center justify-between mb-1">
                        <span className="font-medium text-sm">{alt.name}</span>
@@ -600,12 +644,12 @@
                      <p className="text-xs text-muted-foreground mb-2">{alt.description}</p>
                      <div className="flex gap-2 text-xs">
                        {alt.savings?.time && alt.savings.time > 0 && (
-                         <Badge variant="secondary" className="text-green-600">
+                         <Badge variant="secondary" className="text-emerald-600">
                            -{alt.savings.time} min
                          </Badge>
                        )}
                        {alt.savings?.fuel && alt.savings.fuel > 0 && (
-                         <Badge variant="secondary" className="text-green-600">
+                         <Badge variant="secondary" className="text-emerald-600">
                            -{alt.savings.fuel} RON
                          </Badge>
                        )}
@@ -615,6 +659,12 @@
                </CardContent>
              </Card>
            )}
+           
+           {/* Travel Alerts */}
+           <TravelAlertsPanel 
+             routeCoordinates={routeResult?.coordinates || []}
+             isVisible={!!routeResult}
+           />
          </div>
        </div>
      </div>

@@ -29,12 +29,31 @@ const endIcon = new L.Icon({
   shadowSize: [41, 41],
 });
 
+ // Route colors for main and alternatives
+ const ROUTE_COLORS = {
+   primary: 'hsl(217 91% 60%)', // Primary blue
+   alt1: 'hsl(142 76% 36%)', // Green
+   alt2: 'hsl(280 65% 50%)', // Purple
+   alt3: 'hsl(25 95% 53%)', // Orange
+ };
+ 
+ interface AlternativeRoute {
+   coordinates: [number, number][];
+   name: string;
+   distance: number;
+   duration: number;
+ }
+ 
 interface RouteMapProps {
   startCoords?: [number, number];
   endCoords?: [number, number];
   startName?: string;
   endName?: string;
   routeCoordinates?: [number, number][];
+   alternativeRoutes?: AlternativeRoute[];
+   selectedAlternativeIndex?: number;
+   onSelectAlternative?: (index: number) => void;
+   pois?: { lat: number; lon: number; name: string; type: string }[];
 }
 
 export const RouteMap = ({ 
@@ -42,7 +61,11 @@ export const RouteMap = ({
   endCoords, 
   startName = "Plecare", 
   endName = "Destinație",
-  routeCoordinates = []
+   routeCoordinates = [],
+   alternativeRoutes = [],
+   selectedAlternativeIndex = -1,
+   onSelectAlternative,
+   pois = []
 }: RouteMapProps) => {
   const romaniaCenter: [number, number] = [45.9432, 24.9668];
   const mapDivRef = useRef<HTMLDivElement | null>(null);
@@ -50,6 +73,8 @@ export const RouteMap = ({
   const startMarkerRef = useRef<L.Marker | null>(null);
   const endMarkerRef = useRef<L.Marker | null>(null);
   const routeLineRef = useRef<L.Polyline | null>(null);
+   const altRouteLinesRef = useRef<L.Polyline[]>([]);
+   const poiMarkersRef = useRef<L.Marker[]>([]);
 
   const boundsPadding = useMemo<[number, number]>(() => [50, 50], []);
 
@@ -76,6 +101,8 @@ export const RouteMap = ({
       startMarkerRef.current = null;
       endMarkerRef.current = null;
       routeLineRef.current = null;
+       altRouteLinesRef.current = [];
+       poiMarkersRef.current = [];
     };
   }, [romaniaCenter]);
 
@@ -97,6 +124,10 @@ export const RouteMap = ({
       routeLineRef.current.remove();
       routeLineRef.current = null;
     }
+     altRouteLinesRef.current.forEach(line => line.remove());
+     altRouteLinesRef.current = [];
+     poiMarkersRef.current.forEach(marker => marker.remove());
+     poiMarkersRef.current = [];
 
     const fitCoords: [number, number][] = [];
 
@@ -114,27 +145,78 @@ export const RouteMap = ({
       fitCoords.push(endCoords);
     }
 
+     // Draw alternative routes first (behind main route)
+     const altColors = [ROUTE_COLORS.alt1, ROUTE_COLORS.alt2, ROUTE_COLORS.alt3];
+     alternativeRoutes.forEach((altRoute, idx) => {
+       if (altRoute.coordinates.length > 0) {
+         const isSelected = idx === selectedAlternativeIndex;
+         const line = L.polyline(altRoute.coordinates, {
+           color: altColors[idx % altColors.length],
+           weight: isSelected ? 6 : 4,
+           opacity: isSelected ? 0.9 : 0.5,
+           dashArray: isSelected ? undefined : '10, 10',
+         }).addTo(map);
+         
+         // Add click handler for alternative selection
+         if (onSelectAlternative) {
+           line.on('click', () => onSelectAlternative(idx));
+           line.bindTooltip(
+             `${altRoute.name}: ${altRoute.distance} km, ${Math.floor(altRoute.duration / 60)}h ${altRoute.duration % 60}min`,
+             { sticky: true }
+           );
+         }
+         
+         altRouteLinesRef.current.push(line);
+       }
+     });
+ 
+     // Draw main route on top
     if (routeCoordinates.length > 0) {
       routeLineRef.current = L.polyline(routeCoordinates, {
-        color: "hsl(217 91% 60%)",
-        weight: 5,
+        color: ROUTE_COLORS.primary,
+        weight: 6,
         opacity: 0.8,
       }).addTo(map);
 
       const bounds = L.latLngBounds(routeCoordinates.map((c) => [c[0], c[1]]));
+       
+       // Include alternative routes in bounds
+       alternativeRoutes.forEach(alt => {
+         alt.coordinates.forEach(c => bounds.extend([c[0], c[1]]));
+       });
+       
       map.fitBounds(bounds, { padding: boundsPadding });
-      return;
+     } else if (fitCoords.length >= 2) {
+       const bounds = L.latLngBounds(fitCoords.map((c) => [c[0], c[1]]));
+       map.fitBounds(bounds, { padding: boundsPadding });
+     } else {
+       // Default view
+       map.setView(romaniaCenter, 7);
     }
 
-    if (fitCoords.length >= 2) {
-      const bounds = L.latLngBounds(fitCoords.map((c) => [c[0], c[1]]));
-      map.fitBounds(bounds, { padding: boundsPadding });
-      return;
-    }
-
-    // Default view
-    map.setView(romaniaCenter, 7);
-  }, [startCoords, endCoords, startName, endName, routeCoordinates, romaniaCenter, boundsPadding]);
+     // Add POI markers
+     pois.forEach(poi => {
+       const poiIcon = L.divIcon({
+         className: 'poi-marker',
+         html: `<div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow-lg ${
+           poi.type === 'hospital' ? 'bg-red-500 text-white' :
+           poi.type === 'police' ? 'bg-blue-700 text-white' :
+           poi.type === 'fuel' ? 'bg-amber-500 text-white' : 'bg-gray-500 text-white'
+         }">${
+           poi.type === 'hospital' ? '🏥' :
+           poi.type === 'police' ? '👮' :
+           poi.type === 'fuel' ? '⛽' : '📍'
+         }</div>`,
+         iconSize: [24, 24],
+         iconAnchor: [12, 12]
+       });
+       
+       const marker = L.marker([poi.lat, poi.lon], { icon: poiIcon })
+         .addTo(map)
+         .bindPopup(poi.name);
+       poiMarkersRef.current.push(marker);
+     });
+   }, [startCoords, endCoords, startName, endName, routeCoordinates, alternativeRoutes, selectedAlternativeIndex, onSelectAlternative, pois, romaniaCenter, boundsPadding]);
   
   return (
     <div className="w-full h-full rounded-xl overflow-hidden">
