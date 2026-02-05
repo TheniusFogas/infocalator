@@ -17,6 +17,7 @@ import AtractieAIDetail from "./pages/AtractieAIDetail";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
  import FuelPrices from "./pages/FuelPrices";
+ import Auth from "./pages/Auth";
 
 const queryClient = new QueryClient();
 
@@ -39,6 +40,7 @@ const App = () => (
             <Route path="/vremea" element={<Vremea />} />
              <Route path="/preturi-carburanti" element={<FuelPrices />} />
             <Route path="/evenimente/:slug" element={<EvenimentDetail />} />
+             <Route path="/autentificare" element={<Auth />} />
             <Route path="/admin" element={<Admin />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
