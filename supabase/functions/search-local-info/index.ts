@@ -1,8 +1,8 @@
- import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
  
  const corsHeaders = {
    'Access-Control-Allow-Origin': '*',
-   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
  };
  
  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -23,14 +23,14 @@
  }
  
  async function callLovableAI(prompt: string, systemPrompt: string): Promise<string> {
-   const response = await fetch('https://api.lovable.dev/v1/chat/completions', {
+   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
      method: 'POST',
      headers: {
        'Content-Type': 'application/json',
        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
      },
      body: JSON.stringify({
-       model: 'google/gemini-2.5-flash',
+       model: 'google/gemini-3-flash-preview',
        messages: [
          { role: 'system', content: systemPrompt },
          { role: 'user', content: prompt }
@@ -41,7 +41,9 @@
    });
  
    if (!response.ok) {
-     throw new Error(`AI API error: ${response.status}`);
+     const errorText = await response.text();
+     console.error('AI API error:', response.status, errorText);
+     throw new Error(`AI API error: ${response.status} - ${errorText}`);
    }
  
    const data = await response.json();
