@@ -461,6 +461,210 @@ export type Database = {
         }
         Relationships: []
       }
+      data_sources: {
+        Row: {
+          api_key_name: string | null
+          api_type: string | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          last_sync_at: string | null
+          priority: number | null
+          refresh_interval_hours: number | null
+          source_name: string
+          source_type: string
+          source_url: string
+          sync_error: string | null
+          sync_status: string | null
+          updated_at: string
+        }
+        Insert: {
+          api_key_name?: string | null
+          api_type?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          last_sync_at?: string | null
+          priority?: number | null
+          refresh_interval_hours?: number | null
+          source_name: string
+          source_type: string
+          source_url: string
+          sync_error?: string | null
+          sync_status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          api_key_name?: string | null
+          api_type?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          last_sync_at?: string | null
+          priority?: number | null
+          refresh_interval_hours?: number | null
+          source_name?: string
+          source_type?: string
+          source_url?: string
+          sync_error?: string | null
+          sync_status?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      fuel_prices: {
+        Row: {
+          change_percent: number | null
+          county: string
+          created_at: string
+          expires_at: string
+          fuel_type: string
+          id: string
+          price_avg: number
+          price_max: number
+          price_min: number
+          source_url: string | null
+          trend: string | null
+          updated_at: string
+        }
+        Insert: {
+          change_percent?: number | null
+          county: string
+          created_at?: string
+          expires_at: string
+          fuel_type: string
+          id?: string
+          price_avg: number
+          price_max: number
+          price_min: number
+          source_url?: string | null
+          trend?: string | null
+          updated_at?: string
+        }
+        Update: {
+          change_percent?: number | null
+          county?: string
+          created_at?: string
+          expires_at?: string
+          fuel_type?: string
+          id?: string
+          price_avg?: number
+          price_max?: number
+          price_min?: number
+          source_url?: string | null
+          trend?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      localities: {
+        Row: {
+          county: string
+          county_code: string | null
+          created_at: string
+          elevation: number | null
+          geoname_id: number | null
+          id: string
+          is_county_seat: boolean | null
+          latitude: number
+          locality_type: string
+          longitude: number
+          name: string
+          name_ascii: string | null
+          parent_id: string | null
+          population: number | null
+          postal_code: string | null
+          timezone: string | null
+        }
+        Insert: {
+          county: string
+          county_code?: string | null
+          created_at?: string
+          elevation?: number | null
+          geoname_id?: number | null
+          id?: string
+          is_county_seat?: boolean | null
+          latitude: number
+          locality_type: string
+          longitude: number
+          name: string
+          name_ascii?: string | null
+          parent_id?: string | null
+          population?: number | null
+          postal_code?: string | null
+          timezone?: string | null
+        }
+        Update: {
+          county?: string
+          county_code?: string | null
+          created_at?: string
+          elevation?: number | null
+          geoname_id?: number | null
+          id?: string
+          is_county_seat?: boolean | null
+          latitude?: number
+          locality_type?: string
+          longitude?: number
+          name?: string
+          name_ascii?: string | null
+          parent_id?: string | null
+          population?: number | null
+          postal_code?: string | null
+          timezone?: string | null
+        }
+        Relationships: []
+      }
+      road_conditions: {
+        Row: {
+          condition_status: string
+          created_at: string
+          description: string | null
+          expires_at: string
+          id: string
+          latitude: number | null
+          longitude: number | null
+          road_name: string
+          road_type: string
+          segment_end: string | null
+          segment_start: string | null
+          source_url: string | null
+          updated_at: string
+          warning_type: string | null
+        }
+        Insert: {
+          condition_status: string
+          created_at?: string
+          description?: string | null
+          expires_at: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          road_name: string
+          road_type: string
+          segment_end?: string | null
+          segment_start?: string | null
+          source_url?: string | null
+          updated_at?: string
+          warning_type?: string | null
+        }
+        Update: {
+          condition_status?: string
+          created_at?: string
+          description?: string | null
+          expires_at?: string
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          road_name?: string
+          road_type?: string
+          segment_end?: string | null
+          segment_start?: string | null
+          source_url?: string | null
+          updated_at?: string
+          warning_type?: string | null
+        }
+        Relationships: []
+      }
       routes: {
         Row: {
           created_at: string
@@ -485,6 +689,63 @@ export type Database = {
           from_city?: string
           id?: string
           to_city?: string
+        }
+        Relationships: []
+      }
+      saved_routes: {
+        Row: {
+          created_at: string
+          distance_km: number
+          duration_minutes: number | null
+          expires_at: string | null
+          from_locality_id: string | null
+          from_name: string
+          fuel_consumption_estimate: number | null
+          id: string
+          is_alternative: boolean | null
+          parent_route_id: string | null
+          route_geometry: Json | null
+          to_locality_id: string | null
+          to_name: string
+          toll_cost: number | null
+          view_count: number | null
+          vote_score: number | null
+        }
+        Insert: {
+          created_at?: string
+          distance_km: number
+          duration_minutes?: number | null
+          expires_at?: string | null
+          from_locality_id?: string | null
+          from_name: string
+          fuel_consumption_estimate?: number | null
+          id?: string
+          is_alternative?: boolean | null
+          parent_route_id?: string | null
+          route_geometry?: Json | null
+          to_locality_id?: string | null
+          to_name: string
+          toll_cost?: number | null
+          view_count?: number | null
+          vote_score?: number | null
+        }
+        Update: {
+          created_at?: string
+          distance_km?: number
+          duration_minutes?: number | null
+          expires_at?: string | null
+          from_locality_id?: string | null
+          from_name?: string
+          fuel_consumption_estimate?: number | null
+          id?: string
+          is_alternative?: boolean | null
+          parent_route_id?: string | null
+          route_geometry?: Json | null
+          to_locality_id?: string | null
+          to_name?: string
+          toll_cost?: number | null
+          view_count?: number | null
+          vote_score?: number | null
         }
         Relationships: []
       }
@@ -515,6 +776,45 @@ export type Database = {
           setting_type?: string | null
           setting_value?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      traffic_statistics: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          month: number | null
+          source_url: string | null
+          stat_key: string
+          stat_type: string
+          stat_unit: string | null
+          stat_value: number
+          year: number | null
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          month?: number | null
+          source_url?: string | null
+          stat_key: string
+          stat_type: string
+          stat_unit?: string | null
+          stat_value: number
+          year?: number | null
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          month?: number | null
+          source_url?: string | null
+          stat_key?: string
+          stat_type?: string
+          stat_unit?: string | null
+          stat_value?: number
+          year?: number | null
         }
         Relationships: []
       }

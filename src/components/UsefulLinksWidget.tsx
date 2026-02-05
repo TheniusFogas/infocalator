@@ -36,7 +36,7 @@ const usefulLinks: UsefulLink[] = [
   {
     title: "Prețuri Carburanți",
     description: "Prețuri actualizate benzină și motorină",
-    url: "https://peco-online.ro",
+     url: "/preturi-carburanti",
     icon: <Fuel className="w-5 h-5" />,
     category: "Util"
   },
@@ -50,7 +50,7 @@ const usefulLinks: UsefulLink[] = [
   {
     title: "CNAIR - Stare Trafic",
     description: "Informații oficiale despre trafic",
-    url: "https://www.cfroo.cfr.ro",
+     url: "https://www.cnair.ro",
     icon: <Car className="w-5 h-5" />,
     category: "Trafic"
   },
@@ -81,13 +81,19 @@ export const UsefulLinksWidget = () => {
               className="h-auto p-4 flex flex-col items-start gap-2 text-left hover:bg-muted"
               asChild
             >
-              <a href={link.url} target="_blank" rel="noopener noreferrer">
+               <a 
+                 href={link.url} 
+                 target={link.url.startsWith('/') || link.url.startsWith('tel:') ? undefined : "_blank"} 
+                 rel={link.url.startsWith('/') || link.url.startsWith('tel:') ? undefined : "noopener noreferrer"}
+               >
                 <div className="flex items-center justify-between w-full">
                   <div className="flex items-center gap-2 text-primary">
                     {link.icon}
                     <span className="font-medium text-foreground">{link.title}</span>
                   </div>
-                  <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                   {!link.url.startsWith('/') && !link.url.startsWith('tel:') && (
+                     <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                   )}
                 </div>
                 <p className="text-sm text-muted-foreground">{link.description}</p>
                 <Badge variant="secondary" className="mt-1">{link.category}</Badge>

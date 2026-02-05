@@ -1,4 +1,5 @@
 import { MapPin } from "lucide-react";
+ import { useNavigate } from "react-router-dom";
 
 interface RouteCardProps {
   from: string;
@@ -11,7 +12,7 @@ export const RouteCard = ({ from, to, distance, onClick }: RouteCardProps) => {
   return (
     <div 
       onClick={onClick}
-      className="route-card flex items-center justify-between group"
+       className="route-card flex items-center justify-between group cursor-pointer"
     >
       <div className="flex items-center gap-3">
         <div className="flex items-center text-primary">

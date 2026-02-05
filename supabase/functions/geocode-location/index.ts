@@ -1,10 +1,11 @@
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 interface GeocodeRequest {
   query: string;
+   country?: string; // Optional: 'ro' for Romania, empty for international
 }
 
 interface GeocodeResult {
@@ -14,6 +15,7 @@ interface GeocodeResult {
   longitude: number;
   type: string;
   county?: string;
+   country?: string;
 }
 
 Deno.serve(async (req) => {
@@ -22,7 +24,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { query } = await req.json() as GeocodeRequest;
+     const { query, country } = await req.json() as GeocodeRequest;
     
     if (!query || query.length < 2) {
       return new Response(
@@ -33,14 +35,17 @@ Deno.serve(async (req) => {
 
     console.log(`Geocoding: ${query}`);
 
-    // Use Nominatim (OpenStreetMap) for geocoding - free, no API key needed
+     // Build query based on country preference
+     const searchQuery = country === 'ro' ? `${query}, Romania` : query;
+     const countryFilter = country === 'ro' ? '&countrycodes=ro' : '';
+ 
     const response = await fetch(
       `https://nominatim.openstreetmap.org/search?` +
-      `q=${encodeURIComponent(query + ', Romania')}&` +
+       `q=${encodeURIComponent(searchQuery)}&` +
       `format=json&` +
       `addressdetails=1&` +
-      `limit=15&` +
-      `countrycodes=ro&` +
+       `limit=20` +
+       countryFilter + `&` +
       `accept-language=ro`,
       {
         headers: {
@@ -94,7 +99,8 @@ Deno.serve(async (req) => {
           latitude: parseFloat(item.lat),
           longitude: parseFloat(item.lon),
           type: locationType,
-          county: cleanCounty
+           county: cleanCounty,
+           country: address.country || 'România'
         };
       })
       .filter((item: GeocodeResult) => item.name); // Filter out items without names
@@ -112,7 +118,7 @@ Deno.serve(async (req) => {
     }, []);
 
     return new Response(
-      JSON.stringify({ success: true, results: uniqueResults.slice(0, 10) }),
+       JSON.stringify({ success: true, results: uniqueResults.slice(0, 15) }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
