@@ -165,7 +165,25 @@ export const getUnsplashImage = (keywords: string, width = 800, height = 600): s
 
 // Alternative image sources (more reliable)
 export const getPlaceholderImage = (keywords: string, width = 800, height = 600): string => {
-  // Use picsum for random images or loremflickr for keyword-based
-  const seed = keywords.replace(/\s+/g, '-').toLowerCase();
+  // If keywords looks like a URL, return it directly
+  if (keywords && keywords.startsWith('http')) {
+    return keywords;
+  }
+  
+  // Use picsum for placeholder images with consistent seed
+  const seed = keywords
+    .replace(/\s+/g, '-')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
   return `https://picsum.photos/seed/${seed}/${width}/${height}`;
 };
+ 
+ // Get Wikimedia Commons thumbnail URL
+ export const getWikimediaThumb = (imageName: string, width: number = 640): string => {
+   if (!imageName) return '';
+   if (imageName.startsWith('http')) return imageName;
+   
+   const cleanName = encodeURIComponent(imageName.replace(/ /g, '_'));
+   return `https://commons.wikimedia.org/wiki/Special:FilePath/${cleanName}?width=${width}`;
+ };

@@ -37,98 +37,154 @@
    Object.entries(COUNTY_CODES).map(([name, code]) => [code, name])
  );
  
- // Fetch all Romanian localities from OpenStreetMap via Overpass API
- async function fetchFromOverpass(): Promise<any[]> {
-   console.log('Fetching ALL Romanian localities from OpenStreetMap...');
+ // Import state table name
+ const IMPORT_STATE_KEY = 'localities_import_state';
+ 
+ interface ImportState {
+   lastCountyIndex: number;
+   processedCount: number;
+   totalExpected: number;
+   status: 'idle' | 'running' | 'completed' | 'error';
+   lastError?: string;
+   lastRun?: string;
+ }
+ 
+ // Counties to process in order
+ const COUNTIES_LIST = Object.keys(COUNTY_CODES);
+ 
+ // Fetch localities for a specific county from Overpass API
+ async function fetchCountyFromOverpass(county: string): Promise<any[]> {
+   console.log(`Fetching localities for ${county}...`);
    
-   // Query for all populated places in Romania
+   // More specific query for the county
    const overpassQuery = `
      [out:json][timeout:600];
-     area["ISO3166-1"="RO"]->.romania;
+      area["name"="${county}"]["admin_level"="6"]->.searchArea;
      (
-       node["place"~"city|town|village|hamlet|isolated_dwelling"]["name"](area.romania);
+        node["place"~"city|town|village|hamlet"]["name"](area.searchArea);
      );
      out body;
    `;
    
-   const response = await fetch('https://overpass-api.de/api/interpreter', {
-     method: 'POST',
-     body: `data=${encodeURIComponent(overpassQuery)}`,
-     headers: {
-       'Content-Type': 'application/x-www-form-urlencoded',
-       'User-Agent': 'RomaniaTravel/1.0 (contact@disdis.ro)',
-     },
-   });
-   
-   if (!response.ok) {
-     throw new Error(`Overpass API error: ${response.status}`);
+   try {
+     const response = await fetch('https://overpass-api.de/api/interpreter', {
+       method: 'POST',
+       body: `data=${encodeURIComponent(overpassQuery)}`,
+       headers: {
+         'Content-Type': 'application/x-www-form-urlencoded',
+         'User-Agent': 'RomaniaTravel/1.0 (contact@disdis.ro)',
+       },
+     });
+     
+     if (!response.ok) {
+       console.error(`Overpass error for ${county}: ${response.status}`);
+       return [];
+     }
+     
+     const data = await response.json();
+     console.log(`Found ${data.elements?.length || 0} localities in ${county}`);
+     return data.elements || [];
+   } catch (error) {
+     console.error(`Failed to fetch ${county}:`, error);
+     return [];
    }
-   
-   const data = await response.json();
-   console.log(`Fetched ${data.elements?.length || 0} localities from OpenStreetMap`);
-   
-   return data.elements || [];
  }
  
  // Map OSM place tag to Romanian locality type
- function getLocalityType(place: string): string {
+ function getLocalityType(place: string, tags: any): string {
+   // Check for specific Romanian types
+   if (tags?.['place:ro']) {
+     const roType = tags['place:ro'].toLowerCase();
+     if (roType.includes('municipiu')) return 'Municipiu';
+     if (roType.includes('oraș')) return 'Oraș';
+     if (roType.includes('comună')) return 'Comună';
+   }
+   
    switch (place) {
      case 'city': return 'Municipiu';
      case 'town': return 'Oraș';
      case 'village': return 'Sat';
      case 'hamlet': return 'Cătun';
-     case 'isolated_dwelling': return 'Așezare';
      default: return 'Localitate';
    }
  }
  
- // Extract county from OSM tags
- function extractCounty(tags: any): string {
-   // Try different tag formats
-   const countyTag = tags['addr:county'] || 
-                     tags['is_in:county'] || 
-                     tags['is_in'] || '';
+ // Get or create import state
+ async function getImportState(supabase: any): Promise<ImportState> {
+   const { data } = await supabase
+     .from('site_settings')
+     .select('setting_value')
+     .eq('setting_key', IMPORT_STATE_KEY)
+     .maybeSingle();
    
-   // Clean up county name
-   let county = countyTag
-     .replace(' County', '')
-     .replace('Județul ', '')
-     .replace('judetul ', '')
-     .trim();
-   
-   // Try to match with known counties
-   if (COUNTY_CODES[county]) {
-     return county;
-   }
-   
-   // Try ASCII match
-   const countyAscii = toAscii(county);
-   for (const [name] of Object.entries(COUNTY_CODES)) {
-     if (toAscii(name) === countyAscii) {
-       return name;
+   if (data?.setting_value) {
+     try {
+       return JSON.parse(data.setting_value);
+     } catch {
+       // Invalid state, return default
      }
    }
    
-   return county || 'Necunoscut';
+   return {
+     lastCountyIndex: -1,
+     processedCount: 0,
+     totalExpected: 15000,
+     status: 'idle'
+   };
  }
  
- // Determine county from coordinates using reverse geocoding
- async function getCountyFromCoords(lat: number, lon: number): Promise<string> {
-   try {
-     const response = await fetch(
-       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=8`,
-       { headers: { 'User-Agent': 'RomaniaTravel/1.0 (contact@disdis.ro)' } }
-     );
+ // Save import state
+ async function saveImportState(supabase: any, state: ImportState): Promise<void> {
+   await supabase
+     .from('site_settings')
+     .upsert({
+       setting_key: IMPORT_STATE_KEY,
+       setting_value: JSON.stringify(state),
+       setting_type: 'json',
+       description: 'State for incremental localities import'
+     }, { onConflict: 'setting_key' });
+ }
+ 
+ // Process a single county
+ async function processCounty(supabase: any, county: string): Promise<{ imported: number; errors: number }> {
+   const localities = await fetchCountyFromOverpass(county);
+   let imported = 0;
+   let errors = 0;
+   
+   for (const item of localities) {
+     if (!item.lat || !item.lon || !item.tags?.name) continue;
      
-     if (!response.ok) return 'Necunoscut';
+     const name = item.tags.name;
+     const nameAscii = toAscii(name);
      
-     const data = await response.json();
-     const county = data.address?.county || data.address?.state || '';
-     
-     return county.replace(' County', '').replace('Județul ', '').trim();
-   } catch {
-     return 'Necunoscut';
+     try {
+       const { error } = await supabase.from('localities').upsert({
+         name,
+         name_ascii: nameAscii,
+         county,
+         county_code: COUNTY_CODES[county] || null,
+         population: parseInt(item.tags.population) || null,
+         latitude: item.lat,
+         longitude: item.lon,
+         locality_type: getLocalityType(item.tags.place, item.tags),
+         is_county_seat: item.tags.capital === 'yes' || item.tags.admin_level === '6',
+       }, {
+         onConflict: 'name_ascii,county',
+         ignoreDuplicates: false,
+       });
+       
+       if (error) {
+         console.error(`Error inserting ${name}:`, error.message);
+         errors++;
+       } else {
+         imported++;
+       }
+     } catch (e) {
+       errors++;
+     }
    }
+   
+   return { imported, errors };
  }
  
  Deno.serve(async (req) => {
@@ -141,8 +197,7 @@
      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
      const supabase = createClient(supabaseUrl, supabaseKey);
      
-     // Get request options
-     let options = { batchSize: 100, skipExisting: true, limit: 0 };
+     let options = { countiesPerRun: 3, reset: false };
      try {
        const body = await req.json();
        options = { ...options, ...body };
@@ -150,210 +205,111 @@
        // Use defaults
      }
      
-     console.log('Starting comprehensive locality import from OpenStreetMap...');
-     console.log('Options:', options);
+     // Get current state
+     let state = await getImportState(supabase);
      
-     // Fetch all localities from OpenStreetMap
-     const osmData = await fetchFromOverpass();
-     
-     if (osmData.length === 0) {
-       throw new Error('No data received from OpenStreetMap');
-     }
-     
-     // Process and transform OSM data
-     let localities = osmData
-       .filter((item: any) => item.lat && item.lon && item.tags?.name)
-       .map((item: any) => {
-         const name = item.tags.name;
-         const county = extractCounty(item.tags);
-         
-         return {
-           name,
-           name_ascii: toAscii(name),
-           county,
-           county_code: COUNTY_CODES[county] || null,
-           population: parseInt(item.tags.population) || null,
-           latitude: item.lat,
-           longitude: item.lon,
-           locality_type: getLocalityType(item.tags.place),
-           is_county_seat: item.tags.capital === 'yes' || item.tags.admin_level === '6',
-         };
-       });
-     
-     console.log(`Processed ${localities.length} localities`);
-     
-     // Deduplicate by name + county
-     const seen = new Set<string>();
-     localities = localities.filter((loc: any) => {
-       const key = `${loc.name_ascii}-${toAscii(loc.county)}`;
-       if (seen.has(key)) return false;
-       seen.add(key);
-       return true;
-     });
-     
-     console.log(`${localities.length} unique localities after deduplication`);
-     
-     // Apply limit if specified
-     if (options.limit > 0) {
-       localities = localities.slice(0, options.limit);
-       console.log(`Limited to ${localities.length} localities`);
-     }
-     
-     // Import in batches
-     const BATCH_SIZE = options.batchSize;
-     let imported = 0;
-     let updated = 0;
-     let skipped = 0;
-     let errors = 0;
-     
-     for (let i = 0; i < localities.length; i += BATCH_SIZE) {
-       const batch = localities.slice(i, i + BATCH_SIZE);
-       
-       for (const loc of batch) {
-         try {
-           if (options.skipExisting) {
-             // Check if exists
-             const { data: existing } = await supabase
-               .from('localities')
-               .select('id')
-               .eq('name_ascii', loc.name_ascii)
-               .eq('county', loc.county)
-               .maybeSingle();
-             
-             if (existing) {
-               skipped++;
-               continue;
-             }
-           }
-           
-           // Upsert locality
-           const { error } = await supabase
-             .from('localities')
-             .upsert({
-               name: loc.name,
-               name_ascii: loc.name_ascii,
-               county: loc.county,
-               county_code: loc.county_code,
-               population: loc.population,
-               latitude: loc.latitude,
-               longitude: loc.longitude,
-               locality_type: loc.locality_type,
-               is_county_seat: loc.is_county_seat,
-             }, {
-               onConflict: 'name_ascii,county',
-               ignoreDuplicates: false,
-             });
-           
-           if (error) {
-             // Try insert if upsert fails
-             const { error: insertError } = await supabase
-               .from('localities')
-               .insert({
-                 name: loc.name,
-                 name_ascii: loc.name_ascii,
-                 county: loc.county,
-                 county_code: loc.county_code,
-                 population: loc.population,
-                 latitude: loc.latitude,
-                 longitude: loc.longitude,
-                 locality_type: loc.locality_type,
-                 is_county_seat: loc.is_county_seat,
-               });
-             
-             if (insertError) {
-               console.error(`Error inserting ${loc.name}:`, insertError.message);
-               errors++;
-             } else {
-               imported++;
-             }
-           } else {
-             imported++;
-           }
-         } catch (e) {
-           console.error(`Error processing ${loc.name}:`, e);
-           errors++;
-         }
-       }
-       
-       const progress = Math.round((i / localities.length) * 100);
-       console.log(`Progress: ${progress}% (${i}/${localities.length})`);
-     }
-     
-     // Get final count
-     const { count: totalCount } = await supabase
-       .from('localities')
-       .select('*', { count: 'exact', head: true });
-     
-     // Also sync major cities to the cities table
-     console.log('Syncing major localities to cities table...');
-     
-     const { data: majorLocalities } = await supabase
-       .from('localities')
-       .select('*')
-       .or('locality_type.eq.Municipiu,locality_type.eq.Oraș,is_county_seat.eq.true,population.gte.5000')
-       .order('population', { ascending: false, nullsFirst: false });
-     
-     let citiesSynced = 0;
-     for (const loc of majorLocalities || []) {
-       const { data: existingCity } = await supabase
-         .from('cities')
-         .select('id')
-         .eq('name', loc.name)
-         .eq('county', loc.county)
-         .maybeSingle();
-       
-       const cityData = {
-         name: loc.name,
-         county: loc.county,
-         population: loc.population || 0,
-         latitude: Number(loc.latitude),
-         longitude: Number(loc.longitude),
-         city_type: loc.locality_type || 'Oraș',
-         is_major: loc.locality_type === 'Municipiu' || loc.is_county_seat || (loc.population && loc.population >= 50000),
+     // Reset if requested
+     if (options.reset) {
+       state = {
+         lastCountyIndex: -1,
+         processedCount: 0,
+         totalExpected: 15000,
+         status: 'idle'
        };
+       await saveImportState(supabase, state);
+     }
+     
+     // Check if already completed
+     if (state.status === 'completed') {
+       const { count } = await supabase.from('localities').select('*', { count: 'exact', head: true });
+       return new Response(JSON.stringify({
+         success: true,
+         message: 'Import already completed',
+         stats: { totalInDatabase: count, status: 'completed' }
+       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+     }
+     
+     // Mark as running
+     state.status = 'running';
+     state.lastRun = new Date().toISOString();
+     await saveImportState(supabase, state);
+     
+     // Process next batch of counties
+     const startIdx = state.lastCountyIndex + 1;
+     const endIdx = Math.min(startIdx + options.countiesPerRun, COUNTIES_LIST.length);
+     
+     let totalImported = 0;
+     let totalErrors = 0;
+     const processedCounties: string[] = [];
+     
+     for (let i = startIdx; i < endIdx; i++) {
+       const county = COUNTIES_LIST[i];
+       console.log(`Processing county ${i + 1}/${COUNTIES_LIST.length}: ${county}`);
        
-       if (existingCity) {
-         const { error } = await supabase
-           .from('cities')
-           .update(cityData)
-           .eq('id', existingCity.id);
-         if (!error) citiesSynced++;
-       } else {
-         const { error } = await supabase
-           .from('cities')
-           .insert(cityData);
-         if (!error) citiesSynced++;
+       const result = await processCounty(supabase, county);
+       totalImported += result.imported;
+       totalErrors += result.errors;
+       processedCounties.push(county);
+       
+       // Update state after each county
+       state.lastCountyIndex = i;
+       state.processedCount += result.imported;
+       await saveImportState(supabase, state);
+       
+       // Small delay to avoid rate limits
+       await new Promise(resolve => setTimeout(resolve, 1000));
+     }
+     
+     // Check if completed
+     const isCompleted = endIdx >= COUNTIES_LIST.length;
+     state.status = isCompleted ? 'completed' : 'idle';
+     await saveImportState(supabase, state);
+     
+     // Get current total
+     const { count: totalCount } = await supabase.from('localities').select('*', { count: 'exact', head: true });
+     
+     // Sync to cities table if completed
+     if (isCompleted) {
+       console.log('Syncing major localities to cities table...');
+       const { data: majorLocalities } = await supabase
+         .from('localities')
+         .select('*')
+         .or('locality_type.eq.Municipiu,locality_type.eq.Oraș,is_county_seat.eq.true,population.gte.5000')
+         .order('population', { ascending: false, nullsFirst: false });
+       
+       for (const loc of majorLocalities || []) {
+         await supabase.from('cities').upsert({
+           name: loc.name,
+           county: loc.county,
+           population: loc.population || 0,
+           latitude: Number(loc.latitude),
+           longitude: Number(loc.longitude),
+           city_type: loc.locality_type || 'Oraș',
+           is_major: loc.locality_type === 'Municipiu' || loc.is_county_seat || (loc.population && loc.population >= 50000),
+         }, { onConflict: 'name,county' });
        }
      }
      
-     console.log('Import completed!');
+     return new Response(JSON.stringify({
+       success: true,
+       message: isCompleted ? 'Import completed!' : `Processed ${processedCounties.length} counties. Run again to continue.`,
+       stats: {
+         processedCounties,
+         countiesRemaining: COUNTIES_LIST.length - endIdx,
+         importedThisRun: totalImported,
+         errorsThisRun: totalErrors,
+         totalInDatabase: totalCount,
+         progress: `${endIdx}/${COUNTIES_LIST.length} counties`,
+         status: state.status
+       }
+     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
      
-     return new Response(
-       JSON.stringify({
-         success: true,
-         message: `Import completed successfully`,
-         stats: {
-           fetchedFromOSM: osmData.length,
-           uniqueLocalities: localities.length,
-           imported,
-           updated,
-           skipped,
-           errors,
-           totalInDatabase: totalCount,
-           citiesSynced,
-         },
-       }),
-       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-     );
    } catch (error) {
      console.error('Import error:', error);
-     return new Response(
-       JSON.stringify({ 
-         success: false, 
-        error: error instanceof Error ? error.message : String(error),
-         hint: 'Try with smaller batchSize or limit parameters',
-       }),
-       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-     );
+     return new Response(JSON.stringify({
+       success: false,
+       error: error instanceof Error ? error.message : String(error),
+       hint: 'Run again to resume from last county'
+     }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
    }
  });

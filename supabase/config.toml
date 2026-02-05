@@ -11,3 +11,9 @@ project_id = "errzsskktbinjzryecsg"
  
  [functions.verify-admin]
  verify_jwt = false
+ 
+ [functions.fetch-real-images]
+ verify_jwt = false
+ 
+ [functions.cleanup-expired-content]
+ verify_jwt = false

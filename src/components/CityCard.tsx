@@ -8,6 +8,7 @@ interface CityCardProps {
   type?: "major" | "regular";
   cityType?: string;
   onClick?: () => void;
+  extra?: React.ReactNode;
 }
 
 const cityTypeIcons: Record<string, typeof Building2> = {
@@ -17,7 +18,7 @@ const cityTypeIcons: Record<string, typeof Building2> = {
   'Sat': MapPin,
 };
 
-export const CityCard = ({ name, county, population, type = "regular", cityType = "Oraș", onClick }: CityCardProps) => {
+export const CityCard = ({ name, county, population, type = "regular", cityType = "Oraș", onClick, extra }: CityCardProps) => {
   const formatPopulation = (pop: number) => {
     if (pop >= 1000000) {
       return `${(pop / 1000000).toFixed(1)}M`;
@@ -66,9 +67,12 @@ export const CityCard = ({ name, county, population, type = "regular", cityType 
           <CityTypeIcon className="w-3 h-3" />
           {cityType}
         </Badge>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Users className="w-3 h-3" />
-          <span>{formatPopulation(population)}</span>
+        <div className="flex items-center gap-2">
+          {extra}
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Users className="w-3 h-3" />
+            <span>{formatPopulation(population)}</span>
+          </div>
         </div>
       </div>
     </div>
