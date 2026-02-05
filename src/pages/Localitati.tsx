@@ -1,4 +1,4 @@
- import { useState, useEffect, useMemo, useCallback } from "react";
+ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -8,8 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
  import { Button } from "@/components/ui/button";
  import { Search, Building2, Landmark, TrendingUp, Users, Loader2, ChevronDown } from "lucide-react";
+ import { MapPin } from "lucide-react";
  import { supabase } from "@/integrations/supabase/client";
  import { useDebounce } from "@/hooks/useDebounce";
+ import { useGlobalGeocode, GeoLocation } from "@/hooks/useGlobalGeocode";
  
  interface Locality {
    id: string;
@@ -47,6 +49,12 @@ const LocalitatiPage = () => {
    const [currentPage, setCurrentPage] = useState(0);
    const [hasMore, setHasMore] = useState(true);
    
+   // Autocomplete state
+   const { searchLocations, isSearching: isSearchingGlobal } = useGlobalGeocode();
+   const [suggestions, setSuggestions] = useState<GeoLocation[]>([]);
+   const [showSuggestions, setShowSuggestions] = useState(false);
+   const searchRef = useRef<HTMLDivElement>(null);
+ 
    const debouncedSearch = useDebounce(searchQuery, 300);
  
    // Fetch total counts and major localities
@@ -143,6 +151,39 @@ const LocalitatiPage = () => {
      fetchLocalities(0);
    }, [debouncedSearch, selectedCounty, selectedType]);
  
+   // Autocomplete search
+   useEffect(() => {
+     if (debouncedSearch.length >= 2) {
+       searchLocations(debouncedSearch).then(results => {
+         setSuggestions(results.filter(r => r.isLocal)); // Only local results
+         setShowSuggestions(true);
+       });
+     } else {
+       setSuggestions([]);
+       setShowSuggestions(false);
+     }
+   }, [debouncedSearch, searchLocations]);
+ 
+   // Close suggestions on click outside
+   useEffect(() => {
+     const handleClickOutside = (e: MouseEvent) => {
+       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+         setShowSuggestions(false);
+       }
+     };
+     document.addEventListener('mousedown', handleClickOutside);
+     return () => document.removeEventListener('mousedown', handleClickOutside);
+   }, []);
+ 
+   const handleSuggestionClick = (suggestion: GeoLocation) => {
+     setShowSuggestions(false);
+     setSearchQuery('');
+     // Navigate to locality detail
+     if (suggestion.id) {
+       navigate(`/localitati/${suggestion.id}`);
+     }
+   };
+ 
    const loadMore = () => {
      if (!loadingMore && hasMore) {
        fetchLocalities(currentPage + 1, true);
@@ -211,17 +252,54 @@ const LocalitatiPage = () => {
             <div className="bg-card rounded-2xl border border-border p-4 md:p-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Search Input */}
-                <div>
+                <div ref={searchRef} className="relative">
                   <label className="text-sm text-muted-foreground mb-2 block flex items-center gap-1">
                     <Search className="w-4 h-4" />
-                    Caută după nume sau județ...
+                    Caută localitate...
                   </label>
                   <Input
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Caută după nume sau județ..."
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      if (e.target.value.length >= 2) {
+                        setShowSuggestions(true);
+                      }
+                    }}
+                    onFocus={() => {
+                      if (suggestions.length > 0) setShowSuggestions(true);
+                    }}
+                    placeholder="Caută localitate (ex: Craiova, Târgu Jiu)..."
                     className="h-11 bg-background"
                   />
+                  
+                  {/* Autocomplete Dropdown */}
+                  {showSuggestions && suggestions.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg max-h-80 overflow-y-auto">
+                      {suggestions.map((suggestion, index) => (
+                        <button
+                          key={suggestion.id || index}
+                          onClick={() => handleSuggestionClick(suggestion)}
+                          className="w-full px-4 py-3 text-left hover:bg-muted transition-colors flex items-center gap-3 border-b border-border last:border-0"
+                        >
+                          <MapPin className="w-4 h-4 text-primary shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-foreground truncate">{suggestion.name}</p>
+                            <p className="text-sm text-muted-foreground truncate">
+                              {suggestion.county && `${suggestion.county}, `}{suggestion.type}
+                              {suggestion.population && suggestion.population > 0 && ` • ${suggestion.population.toLocaleString()} loc.`}
+                            </p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Loading indicator */}
+                  {isSearchingGlobal && searchQuery.length >= 2 && (
+                    <div className="absolute right-3 top-[38px]">
+                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
                 </div>
 
                 {/* County Filter */}

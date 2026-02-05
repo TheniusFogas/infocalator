@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+ import { useState, useEffect, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -25,15 +25,15 @@ import { AccommodationsList } from "@/components/AccommodationsList";
 import { AIAttractionsList } from "@/components/AIAttractionsList";
 import { TrafficInfo } from "@/components/TrafficInfo";
 
-interface City {
+ interface Locality {
   id: string;
   name: string;
   county: string;
-  population: number;
-  city_type: string;
+   population: number | null;
+   locality_type: string;
   latitude: number | null;
   longitude: number | null;
-  is_major: boolean;
+   is_county_seat: boolean | null;
 }
 
 interface WeatherData {
@@ -47,25 +47,26 @@ interface WeatherData {
 
 const LocalitateDetailPage = () => {
   const { id } = useParams<{ id: string }>();
-  const [city, setCity] = useState<City | null>(null);
+   const [locality, setLocality] = useState<Locality | null>(null);
   const [loading, setLoading] = useState(true);
   const [nearbyAttractions, setNearbyAttractions] = useState<Attraction[]>([]);
   const [weather, setWeather] = useState<WeatherData | null>(null);
+   const populationTriggered = useRef(false);
 
   useEffect(() => {
-    const loadCity = async () => {
+     const loadLocality = async () => {
       if (!id) return;
 
       const { data, error } = await supabase
-        .from("cities")
+         .from("localities")
         .select("*")
         .eq("id", id)
         .maybeSingle();
 
       if (error) {
-        console.error("Error fetching city:", error);
+         console.error("Error fetching locality:", error);
       } else if (data) {
-        setCity(data);
+         setLocality(data);
         
         if (data.latitude && data.longitude) {
           fetchWeather(data.latitude, data.longitude);
@@ -75,8 +76,19 @@ const LocalitateDetailPage = () => {
       setLoading(false);
     };
 
-    loadCity();
+     loadLocality();
   }, [id]);
+   
+   // Trigger auto-population of content when visiting a locality
+   useEffect(() => {
+     if (!locality || populationTriggered.current) return;
+     populationTriggered.current = true;
+     
+     // Trigger content population in background (attractions, events, accommodations)
+     // This happens via the AI components (AIAttractionsList, EventsList, AccommodationsList)
+     // which call the search-local-info edge function on mount
+     console.log(`Auto-populating content for ${locality.name}, ${locality.county}`);
+   }, [locality]);
 
   const fetchWeather = async (lat: number, lng: number) => {
     try {
@@ -149,13 +161,15 @@ const LocalitateDetailPage = () => {
     );
   }
 
-  if (!city) {
+   if (!locality) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
         <Header />
         <main className="flex-1 container mx-auto px-4 py-8 text-center">
           <h1 className="text-2xl font-bold text-foreground mb-4">Localitate negăsită</h1>
-          <p className="text-muted-foreground mb-6">Ne pare rău, această localitate nu există.</p>
+           <p className="text-muted-foreground mb-6">
+             Ne pare rău, această localitate nu a fost găsită în baza de date.
+           </p>
           <Button asChild>
             <Link to="/localitati">
               <ArrowLeft className="w-4 h-4 mr-2" />
@@ -192,13 +206,13 @@ const LocalitateDetailPage = () => {
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div>
                 <div className="flex items-center gap-3 mb-2">
-                  <Badge variant="secondary">{city.city_type}</Badge>
-                  {city.is_major && <Badge>Oraș Major</Badge>}
+                 <Badge variant="secondary">{locality.locality_type}</Badge>
+                 {locality.is_county_seat && <Badge>Reședință de Județ</Badge>}
                 </div>
-                <h1 className="text-3xl md:text-4xl font-bold text-foreground">{city.name}</h1>
+               <h1 className="text-3xl md:text-4xl font-bold text-foreground">{locality.name}</h1>
                 <p className="text-lg text-muted-foreground flex items-center gap-2 mt-1">
                   <Landmark className="w-4 h-4" />
-                  Județul {city.county}
+                 Județul {locality.county}
                 </p>
               </div>
               
@@ -234,7 +248,7 @@ const LocalitateDetailPage = () => {
                         </div>
                         <div>
                           <p className="text-sm text-muted-foreground">Populație</p>
-                          <p className="font-semibold text-foreground">{formatPopulation(city.population)}</p>
+                         <p className="font-semibold text-foreground">{formatPopulation(locality.population || 0)}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
@@ -243,7 +257,7 @@ const LocalitateDetailPage = () => {
                         </div>
                         <div>
                           <p className="text-sm text-muted-foreground">Județ</p>
-                          <p className="font-semibold text-foreground">{city.county}</p>
+                         <p className="font-semibold text-foreground">{locality.county}</p>
                         </div>
                       </div>
                       {weather && (
@@ -273,11 +287,11 @@ const LocalitateDetailPage = () => {
                 </Card>
 
                 {/* 7-Day Weather Forecast */}
-                {city.latitude && city.longitude && (
+               {locality.latitude && locality.longitude && (
                   <WeatherForecast 
-                    latitude={city.latitude} 
-                    longitude={city.longitude} 
-                    cityName={city.name}
+                   latitude={locality.latitude} 
+                   longitude={locality.longitude} 
+                   cityName={locality.name}
                   />
                 )}
 
@@ -317,10 +331,10 @@ const LocalitateDetailPage = () => {
                 )}
 
                 {/* AI-Generated Content */}
-                <AIAttractionsList location={city.name} county={city.county} />
-                <EventsList location={city.name} county={city.county} />
-                <AccommodationsList location={city.name} county={city.county} />
-                <TrafficInfo location={city.name} county={city.county} />
+               <AIAttractionsList location={locality.name} county={locality.county} />
+               <EventsList location={locality.name} county={locality.county} />
+               <AccommodationsList location={locality.name} county={locality.county} />
+               <TrafficInfo location={locality.name} county={locality.county} />
               </div>
 
               {/* Sidebar */}
@@ -332,21 +346,21 @@ const LocalitateDetailPage = () => {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <Button variant="outline" className="w-full justify-start gap-3" asChild>
-                      <Link to={`/vremea?city=${encodeURIComponent(city.name)}`}>
+                       <Link to={`/vremea?city=${encodeURIComponent(locality.name)}`}>
                         <CloudSun className="w-4 h-4" />
-                        Vremea în {city.name}
+                         Vremea în {locality.name}
                       </Link>
                     </Button>
                     
-                    {city.latitude && city.longitude && (
+                     {locality.latitude && locality.longitude && (
                       <Button variant="outline" className="w-full justify-start gap-3" asChild>
                         <a 
-                          href={`https://www.google.com/maps/dir/?api=1&destination=${city.latitude},${city.longitude}`}
+                           href={`https://www.google.com/maps/dir/?api=1&destination=${locality.latitude},${locality.longitude}`}
                           target="_blank"
                           rel="noopener noreferrer"
                         >
                           <Navigation className="w-4 h-4" />
-                          Navigare către {city.name}
+                           Navigare către {locality.name}
                         </a>
                       </Button>
                     )}
@@ -354,7 +368,7 @@ const LocalitateDetailPage = () => {
                 </Card>
 
                 {/* Location Card */}
-                {city.latitude && city.longitude && (
+               {locality.latitude && locality.longitude && (
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg flex items-center gap-2">
@@ -364,7 +378,7 @@ const LocalitateDetailPage = () => {
                     </CardHeader>
                     <CardContent>
                       <p className="text-sm text-muted-foreground">
-                        {city.latitude.toFixed(4)}, {city.longitude.toFixed(4)}
+                       {locality.latitude.toFixed(4)}, {locality.longitude.toFixed(4)}
                       </p>
                     </CardContent>
                   </Card>
