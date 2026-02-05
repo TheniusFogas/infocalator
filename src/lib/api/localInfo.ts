@@ -123,7 +123,22 @@ export interface GeocodeResult {
   county?: string;
 }
 
-type SearchType = 'events' | 'accommodations' | 'attractions' | 'traffic' | 'event-detail' | 'accommodation-detail' | 'attraction-detail';
+type SearchType = 'events' | 'accommodations' | 'attractions' | 'traffic' | 'event-detail' | 'accommodation-detail' | 'attraction-detail' | 'restaurants';
+
+export interface Restaurant {
+  name: string;
+  slug: string;
+  type: string;
+  description: string;
+  priceRange: string;
+  rating?: number | null;
+  cuisine: string[];
+  location: string;
+  openingHours?: string;
+  imageKeywords?: string;
+  latitude?: number;
+  longitude?: number;
+}
 
 interface SearchResponse<T> {
   success: boolean;
@@ -238,5 +253,17 @@ export const localInfoApi = {
     }
     
     return data?.results || [];
+  },
+
+  async searchRestaurants(location: string, county?: string): Promise<SearchResponse<{ restaurants: Restaurant[] }>> {
+    const { data, error } = await supabase.functions.invoke('search-local-info', {
+      body: { query: location, type: 'restaurants', location, county },
+    });
+
+    if (error) {
+      console.error('Error fetching restaurants:', error);
+      return { success: false, error: error.message };
+    }
+    return data;
   }
 };
