@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+ import { useState, useEffect, useMemo } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -18,7 +18,7 @@ import {
   Ticket,
   Lightbulb
 } from "lucide-react";
-import { localInfoApi, AIAttraction } from "@/lib/api/localInfo";
+ import { localInfoApi, AIAttractionDetail } from "@/lib/api/localInfo";
 import { WeatherForecast } from "@/components/WeatherForecast";
 import { EventsList } from "@/components/EventsList";
 import { AccommodationsList } from "@/components/AccommodationsList";
@@ -30,7 +30,7 @@ const AtractieAIDetailPage = () => {
   const location = searchParams.get("location") || "România";
   const county = searchParams.get("county") || undefined;
   
-  const [attraction, setAttraction] = useState<AIAttraction | null>(null);
+   const [attraction, setAttraction] = useState<AIAttractionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState(0);
@@ -42,22 +42,15 @@ const AtractieAIDetailPage = () => {
       setLoading(true);
       setError(null);
       
-      // Fetch attractions and find the one matching the slug
-      const response = await localInfoApi.searchAttractions(location, county);
+       // Fetch detailed attraction info
+       const response = await localInfoApi.getAttractionDetail(location, slug, county);
       
-      if (response.success && response.data?.attractions) {
-        const found = response.data.attractions.find(a => {
-          const attractionSlug = a.slug || a.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-          return attractionSlug === slug;
-        });
-        
-        if (found) {
-          setAttraction(found);
-        } else {
-          setError("Atracția nu a fost găsită");
-        }
+       if (response.success && response.data?.attraction) {
+         setAttraction(response.data.attraction);
+         // Increment view count
+         localInfoApi.incrementAttractionViews(slug, location);
       } else {
-        setError(response.error || "Nu s-a putut încărca atracția");
+         setError(response.error || "Atracția nu a fost găsită");
       }
       
       setLoading(false);
@@ -67,6 +60,28 @@ const AtractieAIDetailPage = () => {
   }, [slug, location, county]);
 
   const CategoryIcon = attraction ? getCategoryIcon(attraction.category, attractionCategoryIcons) : MapPin;
+ 
+   // Generate images from API or fallback to placeholders - always 8+ images
+   const images = useMemo(() => {
+     if (!attraction) return [];
+     if (attraction.images && attraction.images.length > 0) {
+       return attraction.images.map(img => ({
+         url: getPlaceholderImage(img.url, 1200, 800),
+         alt: img.alt
+       }));
+     }
+     // Fallback to generated placeholders
+     return [
+       { url: getPlaceholderImage(attraction.imageKeywords || attraction.title || 'romania tourist attraction', 1200, 800), alt: attraction.title || 'Atracție' },
+       { url: getPlaceholderImage(`${attraction.category} ${attraction.location} romania`, 1200, 800), alt: `${attraction.category} în ${attraction.location}` },
+       { url: getPlaceholderImage(`turism ${attraction.location} romania panorama`, 1200, 800), alt: `Turism ${attraction.location}` },
+       { url: getPlaceholderImage(`landscape ${attraction.category} nature`, 1200, 800), alt: `Peisaj ${attraction.category}` },
+       { url: getPlaceholderImage(`${attraction.title} historical view`, 1200, 800), alt: `Vedere ${attraction.title}` },
+       { url: getPlaceholderImage(`romania travel ${attraction.category}`, 1200, 800), alt: `Călătorie România` },
+       { url: getPlaceholderImage(`heritage site ${attraction.location}`, 1200, 800), alt: `Patrimoniu ${attraction.location}` },
+       { url: getPlaceholderImage(`tourism destination ${attraction.category} romania`, 1200, 800), alt: `Destinație turistică` },
+     ];
+   }, [attraction]);
 
   if (loading) {
     return (
@@ -101,16 +116,6 @@ const AtractieAIDetailPage = () => {
       </div>
     );
   }
-
-  // Generate multiple images for the gallery
-  const images = [
-    { url: getPlaceholderImage(attraction.imageKeywords || attraction.title, 1200, 800), alt: attraction.title },
-    { url: getPlaceholderImage(`${attraction.category} ${attraction.location}`, 1200, 800), alt: `${attraction.category} în ${attraction.location}` },
-    { url: getPlaceholderImage(`turism ${attraction.location} romania`, 1200, 800), alt: `Turism ${attraction.location}` },
-    { url: getPlaceholderImage(`landscape ${attraction.category}`, 1200, 800), alt: `Peisaj ${attraction.category}` },
-    { url: getPlaceholderImage(`${attraction.title} view`, 1200, 800), alt: `Vedere ${attraction.title}` },
-    { url: getPlaceholderImage(`romania nature ${attraction.category}`, 1200, 800), alt: `Natură România` },
-  ];
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -209,9 +214,75 @@ const AtractieAIDetailPage = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-foreground leading-relaxed">{attraction.description}</p>
+                     <div className="space-y-4">
+                       <p className="text-foreground leading-relaxed">{attraction.description}</p>
+                       {attraction.longDescription && (
+                         <div className="prose prose-neutral max-w-none text-muted-foreground">
+                           {attraction.longDescription.split('\n\n').map((paragraph, i) => (
+                             <p key={i} className="leading-relaxed">{paragraph}</p>
+                           ))}
+                         </div>
+                       )}
+                     </div>
                   </CardContent>
                 </Card>
+ 
+                 {/* History */}
+                 {attraction.history && (
+                   <Card>
+                     <CardHeader>
+                       <CardTitle className="text-lg flex items-center gap-2">
+                         <Info className="w-5 h-5 text-primary" />
+                         Istorie
+                       </CardTitle>
+                     </CardHeader>
+                     <CardContent>
+                       <div className="prose prose-neutral max-w-none text-foreground">
+                         {attraction.history.split('\n\n').map((paragraph, i) => (
+                           <p key={i} className="leading-relaxed mb-3">{paragraph}</p>
+                         ))}
+                       </div>
+                     </CardContent>
+                   </Card>
+                 )}
+ 
+                 {/* Interesting Facts */}
+                 {attraction.facts && attraction.facts.length > 0 && (
+                   <Card>
+                     <CardHeader>
+                       <CardTitle className="text-lg flex items-center gap-2">
+                         <Lightbulb className="w-5 h-5 text-primary" />
+                         Curiozități
+                       </CardTitle>
+                     </CardHeader>
+                     <CardContent>
+                       <ul className="space-y-2">
+                         {attraction.facts.map((fact, i) => (
+                           <li key={i} className="flex items-start gap-2 text-muted-foreground">
+                             <CheckCircle className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                             <span>{fact}</span>
+                           </li>
+                         ))}
+                       </ul>
+                     </CardContent>
+                   </Card>
+                 )}
+ 
+                 {/* Facilities */}
+                 {attraction.facilities && attraction.facilities.length > 0 && (
+                   <Card>
+                     <CardHeader>
+                       <CardTitle className="text-lg">Facilități disponibile</CardTitle>
+                     </CardHeader>
+                     <CardContent>
+                       <div className="flex flex-wrap gap-2">
+                         {attraction.facilities.map((facility, i) => (
+                           <Badge key={i} variant="secondary">{facility}</Badge>
+                         ))}
+                       </div>
+                     </CardContent>
+                   </Card>
+                 )}
 
                 {/* Tips */}
                 {attraction.tips && (
@@ -227,9 +298,43 @@ const AtractieAIDetailPage = () => {
                         <CheckCircle className="w-4 h-4 text-primary mt-0.5 shrink-0" />
                         {attraction.tips}
                       </div>
+                       {attraction.bestTimeToVisit && (
+                         <div className="flex items-start gap-2 text-muted-foreground mt-2">
+                           <Clock className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                           <span><strong>Cel mai bun moment:</strong> {attraction.bestTimeToVisit}</span>
+                         </div>
+                       )}
+                       {attraction.accessibility && (
+                         <div className="flex items-start gap-2 text-muted-foreground mt-2">
+                           <Info className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                           <span><strong>Accesibilitate:</strong> {attraction.accessibility}</span>
+                         </div>
+                       )}
                     </CardContent>
                   </Card>
                 )}
+ 
+                 {/* Nearby Attractions */}
+                 {attraction.nearbyAttractions && attraction.nearbyAttractions.length > 0 && (
+                   <Card>
+                     <CardHeader>
+                       <CardTitle className="text-lg flex items-center gap-2">
+                         <MapPin className="w-5 h-5 text-primary" />
+                         Atracții în apropiere
+                       </CardTitle>
+                     </CardHeader>
+                     <CardContent>
+                       <ul className="space-y-2">
+                         {attraction.nearbyAttractions.map((nearby, i) => (
+                           <li key={i} className="flex items-center justify-between text-sm">
+                             <span className="text-foreground">{nearby.name}</span>
+                             <Badge variant="outline">{nearby.distance}</Badge>
+                           </li>
+                         ))}
+                       </ul>
+                     </CardContent>
+                   </Card>
+                 )}
 
                 {/* Related Content */}
                 <div className="space-y-6 pt-4">
@@ -250,7 +355,7 @@ const AtractieAIDetailPage = () => {
                           <p className="text-3xl font-bold text-primary">{attraction.entryFee}</p>
                         </>
                       ) : (
-                        <Badge className="bg-green-500/10 text-green-600 text-lg py-1">Intrare Gratuită</Badge>
+                         <Badge variant="secondary" className="text-lg py-1 bg-primary/10 text-primary">Intrare Gratuită</Badge>
                       )}
                     </div>
                     
@@ -281,6 +386,12 @@ const AtractieAIDetailPage = () => {
                     {attraction.city && (
                       <p className="text-sm text-muted-foreground">{attraction.city}</p>
                     )}
+                     {attraction.viewCount !== undefined && attraction.viewCount > 0 && (
+                       <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                          <span className="inline-block w-2 h-2 rounded-full bg-primary" />
+                         {attraction.viewCount.toLocaleString('ro-RO')} vizualizări
+                       </p>
+                     )}
                   </CardContent>
                 </Card>
 

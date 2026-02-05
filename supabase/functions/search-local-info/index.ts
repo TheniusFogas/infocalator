@@ -402,6 +402,8 @@ Returnează răspunsul STRICT în format JSON astfel:
     "category": "Muzeu/Natură/Istoric/Religios/Recreere/Traseu/Cascadă/Peșteră/Castel/Lac",
     "description": "Descriere detaliată în română (3-4 propoziții)",
     "longDescription": "Descriere extinsă cu istoria, ce poți vedea, de ce merită vizitat (2-3 paragrafe)",
+     "history": "Istoria detaliată a locației - când a fost construită/descoperită, evenimente importante, transformări în timp (2-3 paragrafe)",
+     "facts": ["Curiozitate interesantă 1", "Fapt puțin cunoscut 2", "Statistică impresionantă 3", "Legendă locală 4", "Record sau premieră 5"],
     "location": "Adresa sau locația exactă",
     "city": "${location}",
     "county": "${county || 'România'}",
@@ -411,9 +413,11 @@ Returnează răspunsul STRICT în format JSON astfel:
       {"url": "castle garden flowers", "alt": "Grădină", "type": "gallery"},
       {"url": "castle tower historical", "alt": "Turn", "type": "gallery"},
       {"url": "castle panoramic view", "alt": "Panoramă", "type": "gallery"},
-      {"url": "castle entrance gate", "alt": "Intrare", "type": "gallery"}
+       {"url": "castle entrance gate", "alt": "Intrare", "type": "gallery"},
+       {"url": "tourists visiting historical site", "alt": "Vizitatori", "type": "gallery"},
+       {"url": "sunset view romanian landmark", "alt": "Apus", "type": "gallery"}
     ],
-    "tips": ["Sfat pentru vizitatori 1", "Sfat 2", "Sfat 3"],
+     "tips": "Sfaturi practice pentru vizitatori (program, ce să iei cu tine, etc)",
     "isPaid": true/false,
     "entryFee": "20 RON",
     "openingHours": "09:00 - 17:00",
@@ -427,7 +431,9 @@ Returnează răspunsul STRICT în format JSON astfel:
     ],
     "coordinates": {"lat": 44.4268, "lng": 26.1025}
   }
-}`;
+}
+ 
+ IMPORTANT: Generează conținut bogat și informativ, cu minim 5 curiozități interesante și 2-3 paragrafe de istorie. Imaginile trebuie să fie 8 cuvinte cheie diferite pentru căutare de imagini.`;
         break;
         
       case 'traffic':
@@ -588,6 +594,36 @@ Returnează răspunsul STRICT în format JSON astfel:
         }, { onConflict: 'slug,location' });
       }
     }
+ 
+     // Cache attraction detail
+     if (type === 'attraction-detail' && parsedContent.attraction) {
+       const attr = parsedContent.attraction;
+       await supabase.from('cached_attractions').upsert({
+         slug: attr.slug,
+         location: location,
+         county: county,
+         title: attr.title,
+         category: attr.category,
+         description: attr.description,
+         long_description: attr.longDescription,
+         history: attr.history,
+         facts: attr.facts,
+         images: attr.images,
+         tips: attr.tips,
+         image_keywords: attr.imageKeywords,
+         is_paid: attr.isPaid,
+         entry_fee: attr.entryFee,
+         opening_hours: attr.openingHours,
+         duration: attr.duration,
+         facilities: attr.facilities,
+         accessibility: attr.accessibility,
+         best_time_to_visit: attr.bestTimeToVisit,
+         nearby_attractions: attr.nearbyAttractions,
+         latitude: attr.coordinates?.lat,
+         longitude: attr.coordinates?.lng,
+         expires_at: expiresAt.toISOString(),
+       }, { onConflict: 'slug,location' });
+     }
 
     return new Response(
       JSON.stringify({ success: true, data: parsedContent, type }),
@@ -669,6 +705,10 @@ function transformCachedData(data: any, type: string): any {
       slug: data.slug,
       category: data.category,
       description: data.description,
+       longDescription: data.long_description,
+       history: data.history,
+       facts: data.facts,
+       images: data.images,
       location: data.location,
       city: data.location,
       tips: data.tips,
@@ -677,7 +717,12 @@ function transformCachedData(data: any, type: string): any {
       entryFee: data.entry_fee,
       openingHours: data.opening_hours,
       duration: data.duration,
+       facilities: data.facilities,
+       accessibility: data.accessibility,
+       bestTimeToVisit: data.best_time_to_visit,
+       nearbyAttractions: data.nearby_attractions,
       coordinates: data.latitude && data.longitude ? { lat: data.latitude, lng: data.longitude } : null,
+       viewCount: data.view_count,
     };
   }
   

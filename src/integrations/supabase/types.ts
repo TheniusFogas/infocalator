@@ -268,6 +268,8 @@ export type Database = {
       }
       cached_attractions: {
         Row: {
+          accessibility: string | null
+          best_time_to_visit: string | null
           category: string | null
           county: string | null
           created_at: string
@@ -275,19 +277,28 @@ export type Database = {
           duration: string | null
           entry_fee: string | null
           expires_at: string
+          facilities: string[] | null
+          facts: Json | null
+          history: string | null
           id: string
           image_keywords: string | null
+          images: Json | null
           is_paid: boolean | null
           latitude: number | null
           location: string
+          long_description: string | null
           longitude: number | null
+          nearby_attractions: Json | null
           opening_hours: string | null
           slug: string
           tips: string | null
           title: string
           updated_at: string
+          view_count: number | null
         }
         Insert: {
+          accessibility?: string | null
+          best_time_to_visit?: string | null
           category?: string | null
           county?: string | null
           created_at?: string
@@ -295,19 +306,28 @@ export type Database = {
           duration?: string | null
           entry_fee?: string | null
           expires_at: string
+          facilities?: string[] | null
+          facts?: Json | null
+          history?: string | null
           id?: string
           image_keywords?: string | null
+          images?: Json | null
           is_paid?: boolean | null
           latitude?: number | null
           location: string
+          long_description?: string | null
           longitude?: number | null
+          nearby_attractions?: Json | null
           opening_hours?: string | null
           slug: string
           tips?: string | null
           title: string
           updated_at?: string
+          view_count?: number | null
         }
         Update: {
+          accessibility?: string | null
+          best_time_to_visit?: string | null
           category?: string | null
           county?: string | null
           created_at?: string
@@ -315,17 +335,24 @@ export type Database = {
           duration?: string | null
           entry_fee?: string | null
           expires_at?: string
+          facilities?: string[] | null
+          facts?: Json | null
+          history?: string | null
           id?: string
           image_keywords?: string | null
+          images?: Json | null
           is_paid?: boolean | null
           latitude?: number | null
           location?: string
+          long_description?: string | null
           longitude?: number | null
+          nearby_attractions?: Json | null
           opening_hours?: string | null
           slug?: string
           tips?: string | null
           title?: string
           updated_at?: string
+          view_count?: number | null
         }
         Relationships: []
       }
@@ -823,7 +850,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      increment_attraction_views: {
+        Args: { attraction_location: string; attraction_slug: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
