@@ -123,7 +123,7 @@ export interface GeocodeResult {
   county?: string;
 }
 
-type SearchType = 'events' | 'accommodations' | 'attractions' | 'traffic' | 'event-detail' | 'accommodation-detail' | 'attraction-detail' | 'restaurants';
+type SearchType = 'events' | 'accommodations' | 'attractions' | 'traffic' | 'event-detail' | 'accommodation-detail' | 'attraction-detail' | 'restaurants' | 'restaurant-detail';
 
 export interface Restaurant {
   name: string;

@@ -27,9 +27,10 @@ import { RealImage } from "@/components/RealImage";
 import { eventCategoryIcons, getCategoryIcon, getPlaceholderImage } from "@/lib/categoryIcons";
 
 const EvenimentDetailPage = () => {
-  const { slug } = useParams<{ slug: string }>();
+  const { oras, slug } = useParams<{ oras?: string; slug: string }>();
   const [searchParams] = useSearchParams();
-  const location = searchParams.get("location") || "România";
+  // Support both /:oras/evenimente/:slug and /evenimente/:slug?location=...
+  const location = oras || searchParams.get("location") || "România";
   const county = searchParams.get("county") || undefined;
   
   const [event, setEvent] = useState<EventDetail | null>(null);

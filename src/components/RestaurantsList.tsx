@@ -5,6 +5,7 @@
  import { UtensilsCrossed, MapPin, Loader2, Star, Clock, ChevronRight, Crown } from "lucide-react";
  import { supabase } from "@/integrations/supabase/client";
  import { RealImage } from "./RealImage";
+import { buildDetailUrl } from "@/lib/urlUtils";
  
  interface Restaurant {
    name: string;
@@ -101,7 +102,7 @@
            {sortedRestaurants.map((restaurant, index) => (
              <Link
                key={index}
-               to={`/restaurante/${restaurant.slug}?location=${encodeURIComponent(location)}${county ? `&county=${encodeURIComponent(county)}` : ''}`}
+                to={buildDetailUrl('restaurante', restaurant.slug, location, county)}
                className="group block"
              >
                <div className={`flex gap-4 p-4 rounded-xl border transition-all ${
