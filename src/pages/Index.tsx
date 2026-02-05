@@ -1,18 +1,20 @@
 import { useState, useEffect } from "react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
-import { RouteCalculatorWithMap } from "@/components/RouteCalculatorWithMap";
+ import { AdvancedRouteCalculator } from "@/components/AdvancedRouteCalculator";
 import { RouteCard } from "@/components/RouteCard";
-import { TrafficStats } from "@/components/TrafficStats";
+ import { ImprovedTrafficStats } from "@/components/ImprovedTrafficStats";
 import { RoadStatusWidget } from "@/components/RoadStatusWidget";
 import { FuelPricesWidget } from "@/components/FuelPricesWidget";
 import { UsefulLinksWidget } from "@/components/UsefulLinksWidget";
 import { TourismCategoriesWidget } from "@/components/TourismCategoriesWidget";
 import { fetchRoutes, Route } from "@/services/routeService";
+ import { useNavigate } from "react-router-dom";
 
 const Index = () => {
   const [routes, setRoutes] = useState<Route[]>([]);
   const [loading, setLoading] = useState(true);
+   const navigate = useNavigate();
 
   useEffect(() => {
     const loadRoutes = async () => {
@@ -31,7 +33,7 @@ const Index = () => {
         {/* Route Calculator Section with Map */}
         <section className="py-6 px-4">
           <div className="container mx-auto">
-            <RouteCalculatorWithMap />
+             <AdvancedRouteCalculator />
           </div>
         </section>
 
@@ -69,6 +71,10 @@ const Index = () => {
                     from={route.from_city}
                     to={route.to_city}
                     distance={route.distance_km}
+                     onClick={() => {
+                       // Pre-populate calculator with this route
+                       window.scrollTo({ top: 0, behavior: 'smooth' });
+                     }}
                   />
                 ))}
               </div>
@@ -84,7 +90,7 @@ const Index = () => {
         </section>
 
         {/* Traffic Stats Section */}
-        <TrafficStats />
+         <ImprovedTrafficStats />
 
         {/* Useful Links */}
         <section className="py-6 px-4">
