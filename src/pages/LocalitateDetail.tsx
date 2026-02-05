@@ -1,5 +1,5 @@
  import { useState, useEffect, useRef } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,8 @@ import { TrafficInfo } from "@/components/TrafficInfo";
 import { WeatherInline } from "@/components/WeatherInline";
 import { NearbyAttractionsClickable } from "@/components/NearbyAttractionsClickable";
 import { RealImage } from "@/components/RealImage";
+import { RestaurantsList } from "@/components/RestaurantsList";
+import { SidebarEventsList } from "@/components/SidebarEventsList";
 
  interface Locality {
   id: string;
@@ -50,6 +52,7 @@ interface WeatherData {
 
 const LocalitateDetailPage = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
    const [locality, setLocality] = useState<Locality | null>(null);
   const [loading, setLoading] = useState(true);
   const [nearbyAttractions, setNearbyAttractions] = useState<Attraction[]>([]);
@@ -191,22 +194,22 @@ const LocalitateDetailPage = () => {
       
       <main className="flex-1">
         {/* Breadcrumb */}
-        <section className="px-4 py-4 border-b border-border">
+        <section className="px-4 py-3 border-b border-border">
           <div className="container mx-auto">
-            <Link 
-              to="/localitati" 
-              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            <button 
+              onClick={() => navigate(-1)}
+              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
-              Înapoi la localități
-            </Link>
+              Înapoi
+            </button>
           </div>
         </section>
 
         {/* Hero */}
-        <section className="px-4 py-8 bg-card border-b border-border relative overflow-hidden">
-          {/* Background Image */}
-          <div className="absolute inset-0 opacity-20">
+        <section className="relative overflow-hidden">
+          {/* Full-width Background Image with blur overlay */}
+          <div className="absolute inset-0">
             <RealImage
               name={locality.name}
               location={locality.county}
@@ -215,9 +218,10 @@ const LocalitateDetailPage = () => {
               width={1920}
               height={400}
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-card/50 to-card" />
+            <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/80 to-background" />
           </div>
           
+          <div className="px-4 py-10 relative z-10">
           <div className="container mx-auto relative z-10">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div>
@@ -232,15 +236,38 @@ const LocalitateDetailPage = () => {
                 </p>
               </div>
               
-              {locality.latitude && locality.longitude && (
-                <WeatherInline
-                  latitude={locality.latitude}
-                  longitude={locality.longitude}
-                  cityName={locality.name}
-                  variant="compact"
-                />
-              )}
+              <div className="flex items-center gap-3">
+                {/* Weather compact */}
+                {locality.latitude && locality.longitude && (
+                  <WeatherInline
+                    latitude={locality.latitude}
+                    longitude={locality.longitude}
+                    cityName={locality.name}
+                    variant="compact"
+                  />
+                )}
+                
+                {/* Coordinates and Navigation - compact */}
+                {locality.latitude && locality.longitude && (
+                  <div className="hidden md:flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground bg-background/50 px-2 py-1 rounded">
+                      {locality.latitude.toFixed(4)}, {locality.longitude.toFixed(4)}
+                    </span>
+                    <Button size="sm" variant="secondary" className="gap-2" asChild>
+                      <a 
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${locality.latitude},${locality.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Navigation className="w-3 h-3" />
+                        Navighează
+                      </a>
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
+          </div>
           </div>
         </section>
 
@@ -301,15 +328,6 @@ const LocalitateDetailPage = () => {
                   </CardContent>
                 </Card>
 
-                {/* 7-Day Weather Forecast */}
-               {locality.latitude && locality.longitude && (
-                  <WeatherForecast 
-                   latitude={locality.latitude} 
-                   longitude={locality.longitude} 
-                   cityName={locality.name}
-                  />
-                )}
-
                 {/* Nearby Attractions from DB */}
                 {nearbyAttractions.length > 0 && (
                   <Card>
@@ -345,69 +363,59 @@ const LocalitateDetailPage = () => {
                   </Card>
                 )}
 
-                {/* Weather Forecast */}
-                {locality.latitude && locality.longitude && (
-                  <WeatherInline
-                    latitude={locality.latitude}
-                    longitude={locality.longitude}
-                    cityName={locality.name}
-                    variant="full"
-                  />
-                )}
-
                 {/* AI-Generated Attractions */}
                <AIAttractionsList location={locality.name} county={locality.county} />
-               <EventsList location={locality.name} county={locality.county} />
+               
+               {/* Restaurants */}
+               <RestaurantsList location={locality.name} county={locality.county} />
+               
                <AccommodationsList location={locality.name} county={locality.county} />
+               
+               {/* Weather Forecast at bottom of main */}
+               {locality.latitude && locality.longitude && (
+                  <WeatherForecast 
+                   latitude={locality.latitude} 
+                   longitude={locality.longitude} 
+                   cityName={locality.name}
+                  />
+                )}
+               
                <TrafficInfo location={locality.name} county={locality.county} />
               </div>
 
               {/* Sidebar */}
               <div className="space-y-4">
-                {/* Actions Card */}
+                {/* Events in Sidebar */}
+                <SidebarEventsList location={locality.name} county={locality.county} />
+                
+                {/* Quick Actions Card */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">Explorează</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
+                    {/* Mobile Navigation */}
+                    {locality.latitude && locality.longitude && (
+                      <Button variant="default" className="w-full justify-start gap-3 md:hidden" asChild>
+                        <a 
+                          href={`https://www.google.com/maps/dir/?api=1&destination=${locality.latitude},${locality.longitude}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <Navigation className="w-4 h-4" />
+                          Navighează către {locality.name}
+                        </a>
+                      </Button>
+                    )}
+                    
                     <Button variant="outline" className="w-full justify-start gap-3" asChild>
                        <Link to={`/vremea?city=${encodeURIComponent(locality.name)}`}>
                         <CloudSun className="w-4 h-4" />
                          Vremea în {locality.name}
                       </Link>
                     </Button>
-                    
-                     {locality.latitude && locality.longitude && (
-                      <Button variant="outline" className="w-full justify-start gap-3" asChild>
-                        <a 
-                           href={`https://www.google.com/maps/dir/?api=1&destination=${locality.latitude},${locality.longitude}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <Navigation className="w-4 h-4" />
-                           Navigare către {locality.name}
-                        </a>
-                      </Button>
-                    )}
                   </CardContent>
                 </Card>
-
-                {/* Location Card */}
-               {locality.latitude && locality.longitude && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-primary" />
-                        Coordonate
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-muted-foreground">
-                       {locality.latitude.toFixed(4)}, {locality.longitude.toFixed(4)}
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
               </div>
             </div>
           </div>

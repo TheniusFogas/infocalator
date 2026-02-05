@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useSearchParams, Link } from "react-router-dom";
+import { useParams, useSearchParams, Link, useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ import { attractionCategoryIcons, getCategoryIcon, getPlaceholderImage } from "@
 const AtractieAIDetailPage = () => {
   const { slug } = useParams<{ slug: string }>();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const location = searchParams.get("location") || "România";
   const county = searchParams.get("county") || undefined;
   
@@ -86,11 +87,9 @@ const AtractieAIDetailPage = () => {
         <main className="flex-1 container mx-auto px-4 py-8 text-center">
           <h1 className="text-2xl font-bold text-foreground mb-4">Atracție negăsită</h1>
           <p className="text-muted-foreground mb-6">{error || "Ne pare rău, această atracție nu există."}</p>
-          <Button asChild>
-            <Link to={`/localitati`}>
+          <Button onClick={() => navigate(-1)}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               Înapoi
-            </Link>
           </Button>
         </main>
         <Footer />
@@ -106,13 +105,13 @@ const AtractieAIDetailPage = () => {
         {/* Breadcrumb */}
         <section className="px-4 py-4 border-b border-border">
           <div className="container mx-auto">
-            <Link 
-              to={`/localitati`}
-              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            <button 
+              onClick={() => navigate(-1)}
+              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
-              Înapoi la localități
-            </Link>
+              Înapoi
+            </button>
           </div>
         </section>
 
