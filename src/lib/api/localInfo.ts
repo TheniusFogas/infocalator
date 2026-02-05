@@ -88,6 +88,19 @@ export interface AIAttraction {
   openingHours?: string;
   duration?: string;
 }
+ 
+ export interface AIAttractionDetail extends AIAttraction {
+   longDescription?: string;
+   history?: string;
+   facts?: string[];
+   images?: Array<{ url: string; alt: string; type: string }>;
+   bestTimeToVisit?: string;
+   facilities?: string[];
+   accessibility?: string;
+   nearbyAttractions?: Array<{ name: string; distance: string }>;
+   coordinates?: { lat: number; lng: number };
+   viewCount?: number;
+ }
 
 export interface TrafficInfo {
   restrictions: Array<{
@@ -110,7 +123,7 @@ export interface GeocodeResult {
   county?: string;
 }
 
-type SearchType = 'events' | 'accommodations' | 'attractions' | 'traffic' | 'event-detail' | 'accommodation-detail';
+type SearchType = 'events' | 'accommodations' | 'attractions' | 'traffic' | 'event-detail' | 'accommodation-detail' | 'attraction-detail';
 
 interface SearchResponse<T> {
   success: boolean;
@@ -178,6 +191,29 @@ export const localInfoApi = {
     }
     return data;
   },
+ 
+   async getAttractionDetail(location: string, slug: string, county?: string): Promise<SearchResponse<{ attraction: AIAttractionDetail }>> {
+     const { data, error } = await supabase.functions.invoke('search-local-info', {
+       body: { query: location, type: 'attraction-detail', location, county, slug },
+     });
+ 
+     if (error) {
+       console.error('Error fetching attraction detail:', error);
+       return { success: false, error: error.message };
+     }
+     return data;
+   },
+ 
+   async incrementAttractionViews(slug: string, location: string): Promise<void> {
+     try {
+       await supabase.rpc('increment_attraction_views', {
+         attraction_slug: slug,
+         attraction_location: location
+       });
+     } catch (error) {
+       console.error('Error incrementing views:', error);
+     }
+   },
 
   async searchTraffic(location: string, county?: string): Promise<SearchResponse<{ trafficInfo: TrafficInfo }>> {
     const { data, error } = await supabase.functions.invoke('search-local-info', {
