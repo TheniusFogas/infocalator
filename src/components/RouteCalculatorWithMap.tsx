@@ -1,23 +1,27 @@
 import { useState, useEffect, useCallback } from "react";
-import { MapPin, ArrowRightLeft, Navigation, Clock, Route as RouteIcon } from "lucide-react";
+ import { MapPin, ArrowRightLeft, Navigation, Clock, Route as RouteIcon, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RouteMap } from "@/components/RouteMap";
-import { searchCities, calculateRoute, getCityByName, City, RouteResult } from "@/services/routeService";
+ import { calculateRoute, RouteResult } from "@/services/routeService";
+ import { useGlobalGeocode, GeoLocation } from "@/hooks/useGlobalGeocode";
 import { useDebounce } from "@/hooks/useDebounce";
+ import { Badge } from "@/components/ui/badge";
 
 export const RouteCalculatorWithMap = () => {
   const [departure, setDeparture] = useState("");
   const [destination, setDestination] = useState("");
-  const [departureCity, setDepartureCity] = useState<City | null>(null);
-  const [destinationCity, setDestinationCity] = useState<City | null>(null);
-  const [departureSuggestions, setDepartureSuggestions] = useState<City[]>([]);
-  const [destinationSuggestions, setDestinationSuggestions] = useState<City[]>([]);
+   const [departureLocation, setDepartureLocation] = useState<GeoLocation | null>(null);
+   const [destinationLocation, setDestinationLocation] = useState<GeoLocation | null>(null);
+   const [departureSuggestions, setDepartureSuggestions] = useState<GeoLocation[]>([]);
+   const [destinationSuggestions, setDestinationSuggestions] = useState<GeoLocation[]>([]);
   const [showDepartureSuggestions, setShowDepartureSuggestions] = useState(false);
   const [showDestinationSuggestions, setShowDestinationSuggestions] = useState(false);
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   
+   const { searchLocations, isSearching } = useGlobalGeocode();
+   
   const debouncedDeparture = useDebounce(departure, 300);
   const debouncedDestination = useDebounce(destination, 300);
 
@@ -25,69 +29,69 @@ export const RouteCalculatorWithMap = () => {
   useEffect(() => {
     const search = async () => {
       if (debouncedDeparture.length >= 2) {
-        const cities = await searchCities(debouncedDeparture);
-        setDepartureSuggestions(cities);
-        setShowDepartureSuggestions(cities.length > 0);
+         const results = await searchLocations(debouncedDeparture);
+         setDepartureSuggestions(results);
+         setShowDepartureSuggestions(results.length > 0);
       } else {
         setDepartureSuggestions([]);
         setShowDepartureSuggestions(false);
       }
     };
-    search();
-  }, [debouncedDeparture]);
+     if (!departureLocation) search();
+   }, [debouncedDeparture, departureLocation, searchLocations]);
 
   // Search for destination cities
   useEffect(() => {
     const search = async () => {
       if (debouncedDestination.length >= 2) {
-        const cities = await searchCities(debouncedDestination);
-        setDestinationSuggestions(cities);
-        setShowDestinationSuggestions(cities.length > 0);
+         const results = await searchLocations(debouncedDestination);
+         setDestinationSuggestions(results);
+         setShowDestinationSuggestions(results.length > 0);
       } else {
         setDestinationSuggestions([]);
         setShowDestinationSuggestions(false);
       }
     };
-    search();
-  }, [debouncedDestination]);
+     if (!destinationLocation) search();
+   }, [debouncedDestination, destinationLocation, searchLocations]);
 
-  const selectDeparture = (city: City) => {
-    setDeparture(city.name);
-    setDepartureCity(city);
+   const selectDeparture = (location: GeoLocation) => {
+     setDeparture(location.name);
+     setDepartureLocation(location);
     setShowDepartureSuggestions(false);
     setRouteResult(null);
   };
 
-  const selectDestination = (city: City) => {
-    setDestination(city.name);
-    setDestinationCity(city);
+   const selectDestination = (location: GeoLocation) => {
+     setDestination(location.name);
+     setDestinationLocation(location);
     setShowDestinationSuggestions(false);
     setRouteResult(null);
   };
 
   const swapLocations = () => {
     const tempName = departure;
-    const tempCity = departureCity;
+     const tempLocation = departureLocation;
     setDeparture(destination);
-    setDepartureCity(destinationCity);
+     setDepartureLocation(destinationLocation);
     setDestination(tempName);
-    setDestinationCity(tempCity);
+     setDestinationLocation(tempLocation);
     setRouteResult(null);
   };
 
   const handleCalculateRoute = async () => {
-    if (!departureCity?.latitude || !departureCity?.longitude || 
-        !destinationCity?.latitude || !destinationCity?.longitude) {
+     if (!departureLocation?.latitude || !departureLocation?.longitude || 
+         !destinationLocation?.latitude || !destinationLocation?.longitude) {
       return;
     }
 
     setIsCalculating(true);
     try {
       const result = await calculateRoute(
-        departureCity.latitude,
-        departureCity.longitude,
-        destinationCity.latitude,
-        destinationCity.longitude
+         departureLocation.latitude,
+         departureLocation.longitude,
+         destinationLocation.latitude,
+         destinationLocation.longitude
       );
       setRouteResult(result);
     } catch (error) {
@@ -104,7 +108,7 @@ export const RouteCalculatorWithMap = () => {
     return `${hours}h ${mins}min`;
   };
 
-  const canCalculate = departureCity?.latitude && destinationCity?.latitude;
+   const canCalculate = departureLocation?.latitude && destinationLocation?.latitude;
 
   return (
     <div className="space-y-6">
@@ -120,25 +124,37 @@ export const RouteCalculatorWithMap = () => {
                 value={departure}
                 onChange={(e) => {
                   setDeparture(e.target.value);
-                  setDepartureCity(null);
+                   setDepartureLocation(null);
                 }}
                 onFocus={() => departureSuggestions.length > 0 && setShowDepartureSuggestions(true)}
-                placeholder="ex. București, România"
+                 placeholder="ex. București, Viena, Paris..."
                 className="pl-11 h-12 bg-background"
               />
+               {isSearching && (
+                 <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-muted-foreground/30 border-t-primary rounded-full animate-spin" />
+               )}
             </div>
             {/* Suggestions dropdown */}
             {showDepartureSuggestions && (
               <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                {departureSuggestions.map((city) => (
+                 {departureSuggestions.map((location, idx) => (
                   <button
-                    key={city.id}
-                    onClick={() => selectDeparture(city)}
+                     key={location.id || idx}
+                     onClick={() => selectDeparture(location)}
                     className="w-full px-4 py-3 text-left hover:bg-accent transition-colors flex items-center gap-2"
                   >
-                    <MapPin className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-medium">{city.name}</span>
-                    <span className="text-sm text-muted-foreground">({city.county})</span>
+                     {location.isLocal ? (
+                       <MapPin className="w-4 h-4 text-primary" />
+                     ) : (
+                       <Globe className="w-4 h-4 text-muted-foreground" />
+                     )}
+                     <span className="font-medium">{location.name}</span>
+                     <span className="text-sm text-muted-foreground">
+                       ({location.county || location.country})
+                     </span>
+                     {!location.isLocal && (
+                       <Badge variant="outline" className="ml-auto text-xs">Global</Badge>
+                     )}
                   </button>
                 ))}
               </div>
@@ -164,25 +180,34 @@ export const RouteCalculatorWithMap = () => {
                 value={destination}
                 onChange={(e) => {
                   setDestination(e.target.value);
-                  setDestinationCity(null);
+                   setDestinationLocation(null);
                 }}
                 onFocus={() => destinationSuggestions.length > 0 && setShowDestinationSuggestions(true)}
-                placeholder="ex. Brașov, România"
+                 placeholder="ex. Brașov, Berlin, Milano..."
                 className="pl-11 h-12 bg-background"
               />
             </div>
             {/* Suggestions dropdown */}
             {showDestinationSuggestions && (
               <div className="absolute z-50 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                {destinationSuggestions.map((city) => (
+                 {destinationSuggestions.map((location, idx) => (
                   <button
-                    key={city.id}
-                    onClick={() => selectDestination(city)}
+                     key={location.id || idx}
+                     onClick={() => selectDestination(location)}
                     className="w-full px-4 py-3 text-left hover:bg-accent transition-colors flex items-center gap-2"
                   >
-                    <MapPin className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-medium">{city.name}</span>
-                    <span className="text-sm text-muted-foreground">({city.county})</span>
+                     {location.isLocal ? (
+                       <MapPin className="w-4 h-4 text-primary" />
+                     ) : (
+                       <Globe className="w-4 h-4 text-muted-foreground" />
+                     )}
+                     <span className="font-medium">{location.name}</span>
+                     <span className="text-sm text-muted-foreground">
+                       ({location.county || location.country})
+                     </span>
+                     {!location.isLocal && (
+                       <Badge variant="outline" className="ml-auto text-xs">Global</Badge>
+                     )}
                   </button>
                 ))}
               </div>
@@ -210,14 +235,14 @@ export const RouteCalculatorWithMap = () => {
         {/* Map */}
         <div className="lg:col-span-2 bg-card rounded-2xl border border-border overflow-hidden h-[400px]">
           <RouteMap
-            startCoords={departureCity?.latitude && departureCity?.longitude 
-              ? [departureCity.latitude, departureCity.longitude] 
+             startCoords={departureLocation?.latitude && departureLocation?.longitude 
+               ? [departureLocation.latitude, departureLocation.longitude] 
               : undefined}
-            endCoords={destinationCity?.latitude && destinationCity?.longitude 
-              ? [destinationCity.latitude, destinationCity.longitude] 
+             endCoords={destinationLocation?.latitude && destinationLocation?.longitude 
+               ? [destinationLocation.latitude, destinationLocation.longitude] 
               : undefined}
-            startName={departureCity?.name}
-            endName={destinationCity?.name}
+             startName={departureLocation?.name}
+             endName={destinationLocation?.name}
             routeCoordinates={routeResult?.coordinates || []}
           />
         </div>
@@ -252,13 +277,13 @@ export const RouteCalculatorWithMap = () => {
               {/* Route Details */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm">
-                  <div className="w-3 h-3 rounded-full bg-success" />
-                  <span className="font-medium">{departureCity?.name}</span>
+                   <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                   <span className="font-medium">{departureLocation?.name}</span>
                 </div>
                 <div className="ml-1.5 border-l-2 border-dashed border-muted-foreground/30 h-8" />
                 <div className="flex items-center gap-2 text-sm">
-                  <div className="w-3 h-3 rounded-full bg-destructive" />
-                  <span className="font-medium">{destinationCity?.name}</span>
+                   <div className="w-3 h-3 rounded-full bg-rose-500" />
+                   <span className="font-medium">{destinationLocation?.name}</span>
                 </div>
               </div>
             </div>
