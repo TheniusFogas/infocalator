@@ -25,7 +25,8 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
+        {/* Added basename for GitHub Pages support */}
+        <BrowserRouter basename="/calator">
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/atractii" element={<Atractii />} />
